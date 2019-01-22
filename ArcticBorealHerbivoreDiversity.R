@@ -8,6 +8,11 @@ require(rasterVis)#Spatial
 require(picante)#Diversity analysis
 require(vegan)#Diversity analysis
 require(ape)#View dendrograms
+require(NbClust)#Find optimum number of clusters
+require(mapdata)#Background world map
+require(maptools)#Background world map
+
+
 
 # Set up ------------------------------------------------------------------
 
@@ -35,7 +40,6 @@ northernecosystems<-crop(tundraboreal,extent(-180,180,40,90))#Remove southern he
 #Project
 northernecosystemspp<-spTransform(northernecosystems,polarproj)
 plot(northernecosystemspp)
-
 
 
 # Species data ------------------------------------------------------------
@@ -130,7 +134,20 @@ levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F)#+
   layer(sp.polygons(noreco_shppp))#Need to get better outline map at somepoint
   
 
-#
+#Better map
+northerneco_studyregion<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
+ext<-as.vector(extent(projectRaster(northerneco_studyregion,crs='+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0')))
+boundaries <- map('worldHires', fill=TRUE,
+                 xlim=ext[1:2], ylim=ext[3:4],
+                 plot=FALSE)
+IDs <- sapply(strsplit(boundaries$names, ":"), function(x) x[1])
+bPols <- map2SpatialPolygons(boundaries, IDs=IDs,
+                             proj4string=CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+bPolslaea<-spTransform(bPols,crs(speciesrichness))
+
+levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F)+
+  layer(sp.polygons(bPolslaea))
+
 
 # Species based cluster analysis ------------------------------------------
 
@@ -145,15 +162,31 @@ hc1<-hclust(dist1,method='ward.D')
 plot(hc1)
 
 #Cut tree (check optimal number of clusters first)
-clusters<-cutree(hc1,k=8)
+optclust<-NbClust(dist1,method='ward.D',index='cindex',min.nc=2,max.nc=10)#9
+optclust
+clusters<-cutree(hc1,k=9)
 
 #Make a raster layer for cluster and populate it 
 speciesclusts<-speciesrichness
 speciesclusts[speciesrichness>1]<-clusters
+speciesclusts[speciesrichness<=1]<-NA
 
-mycol<-brewer.pal(8,'Dark2')
-levelplot(speciesclusts,margin=F,scales=list(draw=FALSE),col.regions=mycol,colorkey=list(at=seq(0.5,8.5,by=1)))+
-  layer(sp.polygons(noreco_shppp))#Need to get better outline map at somepoint
+#Ratify the cluster raster to plot as a factor
+rat_speciesclusts<-ratify(speciesclusts)
+rat <- levels(rat_speciesclusts)[[1]]
+rat$clusterID<-rat$ID
+levels(rat_speciesclusts)<-rat
+#Set colours
+mycol<-c(brewer.pal(8,'Dark2'),1)
+#Plot with country and ecozone outlines
+polyCentroids = gCentroid(northernecosystemspp,byid=T)
+levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F),colorkey=list(title='Cluster'))+
+  layer(sp.polygons(bPolslaea,col=grey(0.5)))+
+  layer(sp.polygons(northernecosystemspp,lwd=1,lty=2,col='blue'))#+
+  #layer(sp.text(polyCentroids@coords,northernecosystemspp$ECO_NAME))
 
+
+#Plot the cluster dendrogram
 #hc1$labels<-rep('llllllllllllllll',times=length(hc1$height)) #Bodge a coloured bar as a label
 #plot(as.phylo(hc1),tip.color=mycol[clusters],cex=0.5,no.margin=T)
+#plot(hc1)
