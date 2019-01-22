@@ -22,8 +22,8 @@ polarproj<-'+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +n
 #Country outlines
 noreco_countries <- c('NO', 'SE', 'FI','RU','CA','IS','GL','SJ','MN','JP') 
 noreco_shp1 <- do.call("bind", lapply(noreco_countries, function(x)  raster::getData('GADM', country=x, level=0)))
-#Only Alaska from USA
-us<-getData('GADM',country='US',level=1)
+#Only Alaska from USA #had to add raster::getData due to error in reading the argument US
+us<-raster::getData('GADM',country='US',level=1)
 alaska<-us[us$NAME_1=='Alaska',]
 #Bind
 noreco_shp<-bind(noreco_shp1,alaska)
