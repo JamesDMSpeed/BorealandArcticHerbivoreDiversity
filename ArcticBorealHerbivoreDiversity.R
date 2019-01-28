@@ -12,7 +12,7 @@ require(NbClust)#Find optimum number of clusters
 require(mapdata)#Background world map
 require(maptools)#Background world map
 require(rgeos)#Crop biomes map
-
+require(reshape2)#Data manipulation
 
 
 # Set up ------------------------------------------------------------------
@@ -120,6 +120,8 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 
 #Not complete!! - check the above
 
+#Simple biome map
+simplebiome<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
 
 
 # Species diversity analysis ----------------------------------------------
@@ -203,19 +205,25 @@ levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
 # Diversity pairplots -----------------------------------------------------
 diversitydata<-data.frame(getValues(diversitystack))
 
-with(diversitydata,plot(Species.richness,Phylogenetic.diversity)) #Very low PD in sites with low SR - only birds in these?
+diversitydata$biomeval<-getValues(simplebiome)
+
+with(diversitydata,plot(Species.richness,Phylogenetic.diversity,type='n')) #Very low PD in sites with low SR - only birds in these?
+with(diversitydata[diversitydata$biomeval==6,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='tan4'))
+with(diversitydata[diversitydata$biomeval==11,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='green3'))
+legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
 
 #Linear model
 lmPDSR<-with(diversitydata,lm(Phylogenetic.diversity~Species.richness))
-abline(lmPDSR)
 summary(lmPDSR)
+newdat<-data.frame(Species.richness=seq(min(diversitydata$Species.richness,na.rm=T),max(diversitydata$Species.richness,na.rm=T),length.out=100))
+newdat$predpd_lin<-predict(lmPDSR,newdata=newdat)
+lines(newdat$Species.richness,newdat$predpd_lin) #Linear is best
 
 #Log model
 logmPDSR<-with(diversitydata,lm(Phylogenetic.diversity~log(Species.richness)))
 summary(logmPDSR)
-newdat<-data.frame(Species.richness=seq(0.01,0.25,length.out=100))
-newdat$predpd<-predict(logmPDSR,newdata=newdat)
-lines(newdat$Species.richness,newdat$predpd) #Linear is best
+newdat$predpd_log<-predict(logmPDSR,newdata=newdat)
+lines(newdat$Species.richness,newdat$predpd_log) #Linear is best
 
 #Phylogenetic diversity in relation to species richness
 pdresiduals<-residuals(lmPDSR)
@@ -244,12 +252,32 @@ diverge0 <- function(p, ramp) {
   p
 }
 
+
 #Plot to show where PD is greater/lower than expected given species richness
 pdp<-levelplot(pdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))
 diverge0(pdp,'RdBu') #Higher PD than expected in Quebec. Lower than expected in Siberia. Also W coast of Norway
 
+meltdat<-melt(diversitydata,measure.vars=c('Species.richness','Phylogenetic.diversity'))
 
+require(ggplot2)
+vio1<-ggplot(data=meltdat[!is.na(meltdat$biomeval),],
+             aes(y=value, x=as.factor(biomeval),fill=variable))+
+  geom_violin()+
+  scale_x_discrete(labels=c("Tundra","Boreal forest"),
+                     name="Biome") +
+  scale_y_continuous('Diversity (proportion of total)')+
+  scale_fill_discrete(name = "Diversity")
+vio1 #Tundra has low species richness but high PD
+
+viodat<-data.frame(cbind(pdresiduals,biome=diversitydata$biomeval[!is.na(diversitydata$Species.richness)]))
+vio2<-ggplot(data=viodat[!is.na(viodat$biome),],aes(x=as.factor(biome),y=pdresiduals))+geom_violin()+
+  scale_x_discrete(labels=c("Tundra","Boreal forest"),
+                   name="Biome") +
+  scale_y_continuous('Residuals of PD~SR')
+vio2
+
+detach(package:ggplot2)#Avoiding conflict with plotting spatial objects 
 
 # Species based cluster analysis ------------------------------------------
 
