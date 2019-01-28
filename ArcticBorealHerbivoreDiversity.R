@@ -145,8 +145,109 @@ bPols <- map2SpatialPolygons(boundaries, IDs=IDs,
                              proj4string=CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
 bPolslaea<-spTransform(bPols,crs(speciesrichness))
 
-levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F)+
+levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
+
+
+# #Phylogeny --------------------------------------------------------------
+
+#Read in phylogeny
+phylogeny<-read.tree('Phylogeny/BestTree_Yet2.newick')
+plot(phylogeny)
+phylogeny$tip.label
+
+#Change format of tip.labels to match species data
+phylogeny$tip.label<-gsub('_','.',phylogeny$tip.label)
+
+#Match synonym names #Not complete
+phylogeny$tip.label[phylogeny$tip.label=="Chen.canagica"]<- "Anser.canagicus"
+phylogeny$tip.label[phylogeny$tip.label=="Anser.cygnoides"]<-  "Anser.cygnoid"
+phylogeny$tip.label[phylogeny$tip.label=="Chen.rossii"]<- "Anser.rossii" 
+phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.parryii"
+
+
+#Convert raster stack to community dataframe
+communitydata<-getValues(herbivore_dataset)
+#Replace NA with 0
+communitydata[is.na(communitydata)]<-0
+
+#Use picante to trim community and phylogenetic data
+phydata<-match.phylo.comm(phylogeny,communitydata)
+
+###
+##Check through the dropped species carefully and fix any that are errors.###
+##Locate spatial data for those that are missing
+###
+
+#Calculate phylogenetic diversity
+phydiv<-pd(phydata$comm,phydata$phy,include.root=T)
+
+#Rasterize this
+phydivraster<-raster(speciesrichness)
+phydivraster<-setValues(phydivraster,phydiv$PD)
+phydivraster<-mask(phydivraster,speciesrichness,maskvalue=NA)
+
+levelplot(phydivraster,par.settings=YlOrRdTheme,margin=F)+
+  layer(sp.polygons(bPolslaea))
+
+#Stack together - each as a proportion of the total species richness or phylogeney branch length
+diversitystack<-stack(speciesrichness/nlayers(herbivore_dataset),phydivraster/sum(phylogeny$edge.length))
+names(diversitystack)<-c('Species richness','Phylogenetic diversity')
+
+levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))
+
+
+
+# Diversity pairplots -----------------------------------------------------
+diversitydata<-data.frame(getValues(diversitystack))
+
+with(diversitydata,plot(Species.richness,Phylogenetic.diversity)) #Very low PD in sites with low SR - only birds in these?
+
+#Linear model
+lmPDSR<-with(diversitydata,lm(Phylogenetic.diversity~Species.richness))
+abline(lmPDSR)
+summary(lmPDSR)
+
+#Log model
+logmPDSR<-with(diversitydata,lm(Phylogenetic.diversity~log(Species.richness)))
+summary(logmPDSR)
+newdat<-data.frame(Species.richness=seq(0.01,0.25,length.out=100))
+newdat$predpd<-predict(logmPDSR,newdata=newdat)
+lines(newdat$Species.richness,newdat$predpd) #Linear is best
+
+#Phylogenetic diversity in relation to species richness
+pdresiduals<-residuals(lmPDSR)
+pdresidualsraster<-raster(speciesrichness)
+pdresidualsraster[!is.na(speciesrichness)]<-pdresiduals
+pdresidualsraster<-mask(pdresidualsraster,speciesrichness,maskvalue=NA)
+
+#Make a function to plot diverging colour scales around 0 
+diverge0 <- function(p, ramp) {
+  require(RColorBrewer)
+  require(rasterVis)
+  if(length(ramp)==1 && is.character(ramp) && ramp %in% 
+     row.names(brewer.pal.info)) {
+    ramp <- suppressWarnings(colorRampPalette(rev(brewer.pal(11, ramp))))
+  } else if(length(ramp) > 1 && is.character(ramp) && all(ramp %in% colors())) {
+    ramp <- colorRampPalette(ramp)
+  } else if(!is.function(ramp)) 
+    stop('ramp should be either the name of a RColorBrewer palette, ', 
+         'a vector of colours to be interpolated, or a colorRampPalette.')
+  rng <- range(p$legend[[1]]$args$key$at)
+  s <- seq(-max(abs(rng)), max(abs(rng)), len=1001)
+  i <- findInterval(rng[which.min(abs(rng))], s)
+  zlim <- switch(which.min(abs(rng)), `1`=i:(1000+1), `2`=1:(i+1))
+  p$legend[[1]]$args$key$at <- s[zlim]
+  p$par.settings$regions$col <- ramp(1000)[zlim[-length(zlim)]]
+  p
+}
+
+#Plot to show where PD is greater/lower than expected given species richness
+pdp<-levelplot(pdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))
+diverge0(pdp,'RdBu') #Higher PD than expected in Quebec. Lower than expected in Siberia. Also W coast of Norway
+
 
 
 # Species based cluster analysis ------------------------------------------
@@ -180,7 +281,7 @@ levels(rat_speciesclusts)<-rat
 mycol<-c(brewer.pal(8,'Dark2'),1)
 #Plot with country and ecozone outlines
 polyCentroids = gCentroid(northernecosystemspp,byid=T)
-levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F),colorkey=list(title='Cluster'))+
+levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F),colorkey=list(title='Cluster'),scales=list(draw=F))+
   layer(sp.polygons(bPolslaea,col=grey(0.5)))+
   layer(sp.polygons(northernecosystemspp,lwd=1,lty=2,col='blue'))#+
   #layer(sp.text(polyCentroids@coords,northernecosystemspp$ECO_NAME))
