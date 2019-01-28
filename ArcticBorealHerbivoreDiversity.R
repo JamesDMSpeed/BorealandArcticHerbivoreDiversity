@@ -11,6 +11,7 @@ require(ape)#View dendrograms
 require(NbClust)#Find optimum number of clusters
 require(mapdata)#Background world map
 require(maptools)#Background world map
+require(rgeos)#Crop biomes map
 
 
 
