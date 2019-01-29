@@ -170,7 +170,7 @@ phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.p
 
 
 #Convert raster stack to community dataframe
-communitydata<-getValues(herbivore_dataset)
+communitydata<- getValues(herbivore_dataset)
 #Replace NA with 0
 communitydata[is.na(communitydata)]<-0
 
