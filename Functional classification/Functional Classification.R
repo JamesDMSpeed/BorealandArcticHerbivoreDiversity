@@ -4,18 +4,22 @@ require(vegan) # mantel test
 require(ape) # export data to biodiverse
 require(RColorBrewer)#Colours to match the results figures
 require(picante)#testing phylogenetic conservatism
+require(missMDA)#Multivariate imputation
 
 #Load and clean data####
 
 #Preliminary trait table - downloaded on 7th Feb 2019
-traittable<-read.csv('Functional classification/TraitTableFeb2019.csv',header=T)
+traittable<-read.csv('Functional classification/TraitTableFeb2019.csv',
+                     header=T, na.strings=c("","NA"))
 View(traittable)
 names(traittable)
 
 tail(traittable)
 #Remove empty rows
-traittable1<-traittable[traittable$Binomial!="",]
+traittable1<-traittable[traittable$Binomial!="" &!is.na(traittable$Binomial),]
 ## select variables to dataframe that will be used
+
+#Set missing data to NA
 
 traitvar<-c("Order", "Family", "Genus", "Species", "Binomial", "Elton.Plant_Others",
        "body_mass", "gut_type", "group_size_summer", "group_size_winter", 
@@ -26,6 +30,8 @@ traitvar<-c("Order", "Family", "Genus", "Species", "Binomial", "Elton.Plant_Othe
 
 Traits<-traittable1[,which(colnames(traittable1) %in% traitvar)]
 summary(Traits)
+
+
 
 #Fix some discrepancies in trait categorids
 levels(Traits$Population_dynamics)[which(levels(Traits$Population_dynamics)=="cyclic_noncyclic ")] = "cyclic_noncyclic" 
@@ -58,28 +64,44 @@ levels(Traits$wintering_strategy)[which(levels(Traits$wintering_strategy)=="acti
 levels(Traits$wintering_strategy)[which(levels(Traits$wintering_strategy)=="active_bellowgroud")] = "active_belowground"
 levels(Traits$wintering_strategy)[which(levels(Traits$wintering_strategy)=="hibernation")] = "hibernating" 
 
+Traits$Elton.Plant_Others[Traits$Elton.Plant_Others=="Mentiones in HB of B that it's highly vegetarian"]<-NA
+Traits$Elton.Plant_Others[Traits$Elton.Plant_Others=="ND"]<-NA
+Traits$Elton.Plant_Others<-as.numeric(as.character(Traits$Elton.Plant_Others))
 
 #Imputing missing data####
 
 #Phylogenetics
 
 #Load phylogeny
-arcborphy<-read.tree('Phylogeny/BestTree_Yet2.newick')
-plot(arcborphy)
-arcborphy$tip.label
-#Change format of tip.labels to match trait data
-arcborphy$tip.label<-gsub('_',' ',arcborphy$tip.label)
-
-rownames(Traits)<-Traits$Binomial
-
-matched<-match.phylo.data(arcborphy,Traits)
-
-phyEstimate(matched$phy,matched$data$Litter_clutch_size[!is.na(matched$data$Litter_clutch_size)])
+# arcborphy<-read.tree('Phylogeny/BestTree_Yet2.newick')
+# plot(arcborphy)
+# arcborphy$tip.label
+# #Change format of tip.labels to match trait data
+# arcborphy$tip.label<-gsub('_',' ',arcborphy$tip.label)
+# 
+# rownames(Traits)<-Traits$Binomial
+# 
+# matched<-match.phylo.data(arcborphy,Traits)
+# 
+# phyEstimate(matched$phy,matched$data$Litter_clutch_size[!is.na(matched$data$Litter_clutch_size)])
+# t2<-Traits[!is.na(Traits$Litter_clutch_size) & !is.na(Traits$body_mass),c(7,11)]
+# phyEstimate(arcborphy,t2)
 
 #Multivariate
 #missMDA
 
+Traits$diet_item_forb<-as.factor(Traits$diet_item_forb)
+Traits$diet_item_graminoid<-as.factor(Traits$diet_item_graminoid)
+Traits$diet_item_shrub<-as.factor(Traits$diet_item_shrub)
+Traits$diet_item_moss<-as.factor(Traits$diet_item_moss)
+Traits$diet_item_lichen<-as.factor(Traits$diet_item_lichen)
+str(Traits)
 
+Traits2<-imputeFAMD(Traits)
+Traits2$completeObs
+Traits2$completeObs$Litter_clutch_size
+
+Traits<-Traits2$completeObs
 ################# transform variables   ----####
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
@@ -163,6 +185,12 @@ Traits$Use_of_vegetation_order[Traits$Use_of_vegetation_order=='canopy']<-'3'
 Traits$Use_of_vegetation_order<-droplevels(Traits$Use_of_vegetation_order)
 Traits$Use_of_vegetation_order<-as.numeric(Traits$Use_of_vegetation_order)
 
+#Convert diet items back to numeric
+Traits$diet_item_forb<-as.numeric(Traits$diet_item_forb)
+Traits$diet_item_shrub<-as.numeric(Traits$diet_item_shrub)
+Traits$diet_item_graminoid<-as.numeric(Traits$diet_item_graminoid)
+Traits$diet_item_moss<-as.numeric(Traits$diet_item_moss)
+Traits$diet_item_lichen<-as.numeric(Traits$diet_item_lichen)
 
 str(Traits)
 
@@ -175,17 +203,25 @@ var<-c( "Binomial",
         "wintering_strategy_order",  "Litter_clutch_size",  "population_dynamics_order",
         "Habitat_type", "Belowground_feeding",
         "Mobility",  "diet_type_order",   "diet_item_forb", "diet_item_graminoid", 
-        "diet_item_shrub",   "diet_item_moss"  , "diet_item_lichen","Use_of_vegetation_order")
+        "diet_item_shrub",   "diet_item_moss"  , "diet_item_lichen","Use_of_vegetation_order",
+        "Elton.Plant_Others")
 
 TOTO<-Traits[,which(colnames(Traits) %in% var)]
 #TOTO<-na.omit(TOTO)
 head(TOTO)
 rownames(TOTO)<- TOTO$Binomial
 names(TOTO)
-TOTO<-TOTO[,2:17]
+TOTO<-TOTO[,2:19]
 Traits_famd<-TOTO ; summary(Traits_famd)
 
 res.famd<-FAMD(Traits_famd,ncp=6) # factorial analysis of mixed data
-#Doesn't work due to missing data
+
 summary(res.famd)
 
+
+hc_2<-HCPC(res.famd,method='ward',metric='euclidean',consol=T,nb.clust=-1) # Hierarchical Clustering on Principle Components
+plot(hc_2)
+
+borarcherb_functree<-(as.phylo(hc_2$call$t$tree))
+x11(5,12)
+plot(borarcherb_functree,no.margin=T)
