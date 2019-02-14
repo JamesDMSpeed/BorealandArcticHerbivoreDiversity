@@ -33,6 +33,8 @@ summary(Traits)
 
 
 
+
+
 #Fix some discrepancies in trait categorids
 levels(Traits$Population_dynamics)[which(levels(Traits$Population_dynamics)=="cyclic_noncyclic ")] = "cyclic_noncyclic" 
 levels(Traits$Population_dynamics)[which(levels(Traits$Population_dynamics)=="noncylcic")] = "noncyclic"
