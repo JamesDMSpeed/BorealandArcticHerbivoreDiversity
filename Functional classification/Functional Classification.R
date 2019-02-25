@@ -1,5 +1,6 @@
 #Functional classification
 library(FactoMineR)#Factorial analysis of mixed data
+require(FactoMineR)
 require(vegan) # mantel test
 require(ape) # export data to biodiverse
 require(RColorBrewer)#Colours to match the results figures
@@ -35,7 +36,7 @@ summary(Traits)
 
 
 
-#Fix some discrepancies in trait categorids
+#Fix some discrepancies in trait categories
 levels(Traits$Population_dynamics)[which(levels(Traits$Population_dynamics)=="cyclic_noncyclic ")] = "cyclic_noncyclic" 
 levels(Traits$Population_dynamics)[which(levels(Traits$Population_dynamics)=="noncylcic")] = "noncyclic"
 

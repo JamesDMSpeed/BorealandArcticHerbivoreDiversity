@@ -1,3 +1,12 @@
+#----------------------------- Start ---------------------------------#
+#Clear GE
+rm(list=ls())
+objects()
+
+#-----------------------------Set WD (Unless studio)
+
+#setwd(url of wd)
+
 #Analysing boreal and arctic herbivore diversity
 
 #Load packages
@@ -61,8 +70,7 @@ herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
 herbivore_dataset
 
 
-#
-#
+
 #Here we need to remove unused species, and add those with missing data!!!
 #Not complete!!
 
@@ -119,6 +127,92 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 
 
 #Not complete!! - check the above
+
+###------------------Attempt at separate c. elaphus and c. canadiensis--------------###
+#plot(herbivore_dataset[[49]])
+#create object for c.elaphus distribution
+#c_elaphusdst<-herbivore_dataset[[49]]
+#plot(c_elaphusdst)
+
+#Extract c.elaphus
+#extcela<-projectRaster(c_elaphusdst,crs='+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0',method='ngb')#reconfigure coordinate types for crop
+
+#plot(extcela)#--------------------check if projection changed
+
+
+#c_elaphusdstf<-crop(extcela,extent(-20,180,40,90))#Remove c.canadiensis
+#plot(c_elaphusdstf)#--------------check crop
+
+#c_elaphusdstff<-projectRaster(c_elaphusdstf,c_elaphusdst,method='ngb')
+#getValues(c_elaphusdstff)
+#plot(c_elaphusdstf)
+
+#--------------Try fixing projection problem reduced resolution-------------------------####
+#c_elaphusdst<-herbivore_dataset[[49]]
+#extcela<-projectRaster(c_elaphusdst,crs='+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378137 +b=6378137 +units=m +no_defs')#reconfigure coordinate types for crop
+
+#plot(extcela)#--------------------check if projection changed
+
+#c_elaphusdstf<-crop(extcela,extent(-20,180,40,90)) #crop
+#----------------------------------------------------------DID NOT WORK....
+
+#--------------------------------Try direct crop from polarproj--------------------------###
+#extract c. elaphus distribution data
+c_elaphusdst<-herbivore_dataset[[49]]
+#plot(c_elaphusdst)
+c_elaphusdstf<-crop(c_elaphusdst,extent(0e+00,1e+07,-4e+06,4e+06))
+#plot(c_elaphusdstf)
+c_elaphusdstff<-extend(c_elaphusdstf,extent(c_elaphusdst))
+#plot(c_elaphusdstff)
+
+
+#extract c. canadiensis distribution data
+c_canadadst<-herbivore_dataset[[49]]
+#plot(c_canadadst)
+c_canadadstf<-crop(c_canadadst,extent(-1e+07,0e+00,-4e+06,4e+06))#crop it
+#plot(c_canadadstf)
+c_canadadstff<-extend(c_canadadstf,extent(c_canadadst))#return to normal size
+#plot(c_canadadstff)
+
+###----------------------------------Close attempt----------------------------------###
+
+###----------------------------------Merging Alces----------------------------------###
+alcesal<-herbivore_dataset[[2]]
+#plot(alcesal)
+
+alcesam<-herbivore_dataset[[3]]
+#plot(alcesam)
+
+alcesdstf<-merge(alcesal,alcesam,overlap=TRUE,ext=NULL)
+#plot(alcesdstf)
+
+###----------------------------------Close merging----------------------------------###
+
+###----------------------------Remove alces and c.elaphus---------------------------###
+
+cervidslist<-c('Cervus.elaphus','Alces.alces','Alces.americanus')
+herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%cervidslist==F)]]
+
+###----------------------------------Close deletion---------------------------------###
+
+###--------------------Stack Cervids and insert to herbivore_dataset----------------###
+
+Cervus.elaphus<-c_elaphusdstff
+Cervus.canadiensis<-c_canadadstff
+Alces.alces<-alcesdstf
+
+antlerlist<-stack(Cervus.elaphus,Cervus.canadiensis,Alces.alces)
+
+herbivore_dataset<-stack(herbivore_dataset,Cervus.elaphus,Cervus.canadiensis,Alces.alces)
+names(herbivore_dataset)
+
+#NOT WORKING Not joining the new rasters with the desired name (Specify filename when creating new rasters? Maybe?!)
+#[172] "Cricetulus.barabensis.1.2"     "Cricetulus.barabensis.2.1"     "layer.1"                      
+#[175] "Cricetulus.barabensis.2.2"     "Cricetulus.barabensis.3"       "layer.2"                      
+ 
+
+
+###----------------------------------Close insertion--------------------------------###
 
 #Simple biome map
 simplebiome<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
