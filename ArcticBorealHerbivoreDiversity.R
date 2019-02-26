@@ -31,7 +31,7 @@ noreco_shp<-bind(noreco_shp1,alaska)
 #Project
 noreco_shppp<-spTransform(noreco_shp,CRS=crs(polarproj))
 
-plot(noreco_shppp)
+#plot(noreco_shppp)
 
 
 #Biomes
@@ -40,7 +40,7 @@ tundraboreal<-ecoregions[ecoregions$BIOME==6|ecoregions$BIOME==11,]
 northernecosystems<-crop(tundraboreal,extent(-180,180,40,90))#Remove southern hemisphere
 #Project
 northernecosystemspp<-spTransform(northernecosystems,polarproj)
-plot(northernecosystemspp)
+#plot(northernecosystemspp)
 
 
 # Species data ------------------------------------------------------------
@@ -54,7 +54,7 @@ herbivore_dataset<-stack(filelist)
 names(herbivore_dataset)<-substring(names(herbivore_dataset),3)
 names(herbivore_dataset)
 
-plot(herbivore_dataset[[1]])
+plot(herbivore_dataset[[2]])
 
 #Project
 herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
