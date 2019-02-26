@@ -54,7 +54,7 @@ herbivore_dataset<-stack(filelist)
 names(herbivore_dataset)<-substring(names(herbivore_dataset),3)
 names(herbivore_dataset)
 
-plot(herbivore_dataset[[2]])
+plot(herbivore_dataset[[1]])
 
 #Project
 herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
@@ -100,7 +100,7 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 #Allocricetulus.eversmanni
 #Anas.platyrhynchos
 #Anas.rubripes"            
-#Cervus.canadensis #Should seperate this from Cervus elaphys in distribiton data #Also join Alces alces and A. americanus
+#Cervus.canadensis #Should seperate this from Cervus elaphys in distribiton data
 # Glaucomys.sabrinus   
 # Melanitta.americana 
 # Melanitta.deglandi  
