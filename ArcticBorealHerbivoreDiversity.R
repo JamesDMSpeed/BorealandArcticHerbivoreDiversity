@@ -94,28 +94,28 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 #Ursus.arctos  
 
 #Species on trait list, not in spatial data - check these
-#Aix.galericulata
-#Allactaga.major
-#Allactaga.sibirica
-#Allocricetulus.eversmanni
-#Anas.platyrhynchos
-#Anas.rubripes"            
-#Cervus.canadensis #Should seperate this from Cervus elaphys in distribiton data
-# Glaucomys.sabrinus   
-# Melanitta.americana 
-# Melanitta.deglandi  
-# Melanitta.stejnegeri
-# Micromys.minutus
-# Microtus.hyperboreus  
-# Napaeozapus.insignis      
-# Phasianus.colchicus     
-# Phodopus.campbelli
-# Phodopus.sungorus
-# Pteromys.volans
-# Sciurus.carolinensis
-# Sciurus.vulgaris
-# Spatula.querquedula
-# Tamias.striatus
+#Aix.galericulata (DONE)
+#Allactaga.major(DONE)
+#Allactaga.sibirica(DONE)
+#Allocricetulus.eversmanni(DONE)
+#Anas.platyrhynchos(DONE)
+#Anas.rubripes"  (DONE)          
+#Cervus.canadensis (DONE)
+#Glaucomys.sabrinus (DONE)  
+#Melanitta.americana (DONE) 
+#Melanitta.deglandi (DONE) 
+#Melanitta.stejnegeri(DONE)
+#Micromys.minutus(DONE)
+#Microtus.hyperboreus (DONE) 
+#Napaeozapus.insignis   (DONE)   
+#Phasianus.colchicus   (DONE)  
+#Phodopus.campbelli (DONE)  
+#Phodopus.sungorus (DONE)
+#Pteromys.volans (DONE)
+#Sciurus.carolinensis (DONE)
+#Sciurus.vulgaris(DONE)
+#Spatula.querquedula(DONE)
+#Tamias.striatus (DONE)
 
 
 #Not complete!! - check the above

@@ -58,6 +58,6 @@ plot(raster2)
 
 #Extract the resulting map!
 
-writeRaster(raster2,filename='_Cervus.elaphus.tif')
+writeRaster(raster2,filename='_Tamias.striatus.tif')
 
 
