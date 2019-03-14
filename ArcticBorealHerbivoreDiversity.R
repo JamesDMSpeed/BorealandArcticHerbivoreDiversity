@@ -61,37 +61,63 @@ herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
 herbivore_dataset
 
 
-#
+#---Different Extent Issue fixed by stacking stacks-not classy but works---
+
+filelist2<-list.files('DifferentExtent',full.names = T)
+filelist2
+#Stack up
+herbivore_dataset2<-stack(filelist2)
+
+#Tidy names
+names(herbivore_dataset2)<-substring(names(herbivore_dataset2),3)
+names(herbivore_dataset2)
+
+plot(herbivore_dataset2[[1]])
+
+#Project
+herbivore_dataset2<-projectRaster(herbivore_dataset2,crs=polarproj)
+herbivore_dataset2
+
+#Stack the two
+herbivore_dataset3<-stack(herbivore_dataset,herbivore_dataset2)
+
+#Working rasterstack = herbivore_dataset3
+
+#------Fixed Different Extent Issue-------------------------------------
+
+
 #
 #Here we need to remove unused species, and add those with missing data!!!
 #Not complete!!
 
-spplist<-read.csv('TraitSpreadSheetJan2019.csv')
+spplist<-read.csv('TraitTableFeb2019.csv')
 spplist$Binomial
 
 #Match names
 #Replace dot with space to match with raster stack names
 spplist1<-spplist$Binomial
 spplist1<-sub(' ','.',spplist1)
-spplist1%in%names(herbivore_dataset)
+spplist1%in%names(herbivore_dataset3)
 
 #These species are ok
-spplist1[which(spplist1%in%names(herbivore_dataset))]
-spplist1[which(spplist1%in%names(herbivore_dataset)==F)]#These species are not in the spatial data 
-names(herbivore_dataset)[which(names(herbivore_dataset)%in%spplist1==F)]#These species are in the spatial data but not spp list
+spplist1[which(spplist1%in%names(herbivore_dataset3))]
+spplist1[which(spplist1%in%names(herbivore_dataset3)==F)]#These species are not in the spatial data 
+names(herbivore_dataset3)[which(names(herbivore_dataset3)%in%spplist1==F)]#These species are in the spatial data but not spp list
 
 #Several of these are synonyms
 #Anser==Chen
 #Anas==Mareca
 #Urocitellus.parryii==Spermophilus.parryii
 
-#Remove livestock from spatial data
+#Remove livestock & Irrelevant Herbivores from spatial data
 livestocklist<-c('Bos.taurus','Capra.aegagrus','Ovis.aries')
-herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestocklist==F)]]
+herbivore_dataset3<-herbivore_dataset3[[which(names(herbivore_dataset3)%in%livestocklist==F)]]
+
+
 
 #Two species in spatial dataset not on trait list
 #Aythya.collaris
-#Ursus.arctos  
+#Ursus.arctos (DONE)
 
 #Species on trait list, not in spatial data - check these
 #Aix.galericulata (DONE)
@@ -101,6 +127,7 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 #Anas.platyrhynchos(DONE)
 #Anas.rubripes"  (DONE)          
 #Cervus.canadensis (DONE)
+#Cervus.elaphus (DONE)
 #Glaucomys.sabrinus (DONE)  
 #Melanitta.americana (DONE) 
 #Melanitta.deglandi (DONE) 
@@ -118,10 +145,11 @@ herbivore_dataset<-herbivore_dataset[[which(names(herbivore_dataset)%in%livestoc
 #Tamias.striatus (DONE)
 
 
+
 #Not complete!! - check the above
 
 #Simple biome map
-simplebiome<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
+simplebiome<-rasterize(northernecosystemspp,herbivore_dataset3,field='BIOME')
 
 
 # Species diversity analysis ----------------------------------------------
@@ -129,7 +157,7 @@ simplebiome<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
 
 #Diversity analysis
 #Calculate species richness 
-sr<-calc(herbivore_dataset,fun=sum,na.rm=T)
+sr<-calc(herbivore_dataset3,fun=sum,na.rm=T)
 #Cells with sr>0
 speciesrichness<-sr
 speciesrichness[sr==0]<-NA
@@ -138,7 +166,7 @@ levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F)#+
   
 
 #Better map
-northerneco_studyregion<-rasterize(northernecosystemspp,herbivore_dataset,field='BIOME')
+northerneco_studyregion<-rasterize(northernecosystemspp,herbivore_dataset3,field='BIOME')
 ext<-as.vector(extent(projectRaster(northerneco_studyregion,crs='+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0')))
 boundaries <- map('worldHires', fill=TRUE,
                  xlim=ext[1:2], ylim=ext[3:4],
@@ -170,7 +198,7 @@ phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.p
 
 
 #Convert raster stack to community dataframe
-communitydata<- getValues(herbivore_dataset)
+communitydata<- getValues(herbivore_dataset3)
 #Replace NA with 0
 communitydata[is.na(communitydata)]<-0
 
@@ -194,7 +222,7 @@ levelplot(phydivraster,par.settings=YlOrRdTheme,margin=F)+
   layer(sp.polygons(bPolslaea))
 
 #Stack together - each as a proportion of the total species richness or phylogeney branch length
-diversitystack<-stack(speciesrichness/nlayers(herbivore_dataset),phydivraster/sum(phylogeny$edge.length))
+diversitystack<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/sum(phylogeny$edge.length))
 names(diversitystack)<-c('Species richness','Phylogenetic diversity')
 
 levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
@@ -282,7 +310,7 @@ detach(package:ggplot2)#Avoiding conflict with plotting spatial objects
 # Species based cluster analysis ------------------------------------------
 
 #Community data
-herbcomdata<-getValues(herbivore_dataset)
+herbcomdata<-getValues(herbivore_dataset3)
 herbcomdata1<-herbcomdata[rowSums(herbcomdata,na.rm=T)>1,]
 herbcomdata1[is.na(herbcomdata1)]<-0
 #Distance matrix

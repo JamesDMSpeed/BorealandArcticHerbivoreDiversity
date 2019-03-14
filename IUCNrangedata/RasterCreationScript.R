@@ -56,8 +56,41 @@ raster2[raster2>1.5]<-NA     #Change all the values >1.5 to NA values
 raster2[raster2==1.5]<-1     #Change all the valuse =1.5 to 1 values
 plot(raster2)
 
+#Crop the map into the desired shape to fix extent issue
+
+
+###------------------------------FIX EXTENT PROBLEM--------------------------####
+#extend(raster2,rml2)
+
+#crop(raster2,hds1,snap='near')
+
+#hds2 <- (herbivore_dataset[[2]])
+#hds1 <- (herbivore_dataset[[1]])
+#plot(hds1)
+#alignExtent(raster2,hds1,snap='near')
+
+#e <- extent(-4315472,4684528,-4190866,3509134)
+
+#raster3<-setExtent(raster2,hds1,snap = TRUE,keepres = FALSE)
+#raster3<-setExtent(raster2,hds1)
+
+#raster3<-raster2
+#crs(raster3) <- crs(hds1)
+#extent(raster3) <- extent(hds1)
+#plot(raster3)
+#plot(hds1)
+
+
+
+#remove(raster3,raster2,raster,shp,shpp)
+
+#------------------------------------PROBLEM-----------------------------#
+
+
+##SOLVED WITH MULTIPLE STACKS INDEPENDENTLY CREATED AND MERGED AFTERWARDS, ADDED TO MAIN SCRIPT!
+
 #Extract the resulting map!
 
-writeRaster(raster2,filename='_Tamias.striatus.tif')
+writeRaster(raster3,filename='_Tamias.striatus.tif')
 
 
