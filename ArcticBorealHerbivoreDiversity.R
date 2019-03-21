@@ -116,7 +116,7 @@ herbivore_dataset3<-herbivore_dataset3[[which(names(herbivore_dataset3)%in%lives
 
 
 #Two species in spatial dataset not on trait list
-#Aythya.collaris
+#Aythya.collaris (DONE)
 #Ursus.arctos (DONE)
 
 #Species on trait list, not in spatial data - check these
