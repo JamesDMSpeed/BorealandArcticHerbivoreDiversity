@@ -9,7 +9,7 @@ require(missMDA)#Multivariate imputation
 #Load and clean data####
 
 #Preliminary trait table - downloaded on 7th Feb 2019
-traittable<-read.csv('Functional classification/TraitTableFeb2019.csv',
+traittable<-read.csv('Functionalclassification/TraitTableFeb2019.csv',
                      header=T, na.strings=c("","NA"))
 View(traittable)
 names(traittable)
@@ -75,17 +75,29 @@ Traits$Elton.Plant_Others<-as.numeric(as.character(Traits$Elton.Plant_Others))
 #Phylogenetics
 
 #Load phylogeny
-# arcborphy<-read.tree('Phylogeny/BestTree_Yet2.newick')
-# plot(arcborphy)
-# arcborphy$tip.label
+arcborphy<-read.tree('Phylogeny/BestTree.newick')
+plot(arcborphy)
+arcborphy$tip.label
+
+### Synonyms
+
+arcborphy$tip.label[arcborphy$tip.label=="Anas_querquedula"] <- "Spatula_querquedula"
+arcborphy$tip.label[arcborphy$tip.label=="Anser_cygnoides"] <- "Anser cygnoid"
+
+
+
+arcborphy$tip.label
+###  End
+
 # #Change format of tip.labels to match trait data
-# arcborphy$tip.label<-gsub('_',' ',arcborphy$tip.label)
+arcborphy$tip.label<-gsub('_',' ',arcborphy$tip.label)
 # 
-# rownames(Traits)<-Traits$Binomial
+rownames(Traits)<-Traits$Binomial
+ 
+
+matched<-match.phylo.data(arcborphy,Traits)
 # 
-# matched<-match.phylo.data(arcborphy,Traits)
-# 
-# phyEstimate(matched$phy,matched$data$Litter_clutch_size[!is.na(matched$data$Litter_clutch_size)])
+phyEstimate(matched$phy,matched$data$Litter_clutch_size[!is.na(matched$data$Litter_clutch_size)])
 # t2<-Traits[!is.na(Traits$Litter_clutch_size) & !is.na(Traits$body_mass),c(7,11)]
 # phyEstimate(arcborphy,t2)
 
