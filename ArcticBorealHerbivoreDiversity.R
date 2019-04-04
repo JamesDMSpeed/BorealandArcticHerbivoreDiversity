@@ -78,8 +78,10 @@ plot(herbivore_dataset2[[1]])
 herbivore_dataset2<-projectRaster(herbivore_dataset2,crs=polarproj)
 herbivore_dataset2
 
+#setExtent(herbivore_dataset2,herbivore_dataset)
+
 #Stack the two
-herbivore_dataset3<-stack(herbivore_dataset,herbivore_dataset2)
+herbivore_dataset3<-stack(herbivore_dataset,crop(herbivore_dataset2,herbivore_dataset))
 
 #Working rasterstack = herbivore_dataset3
 
@@ -110,8 +112,8 @@ names(herbivore_dataset3)[which(names(herbivore_dataset3)%in%spplist1==F)]#These
 #Urocitellus.parryii==Spermophilus.parryii
 
 #Remove livestock & Irrelevant Herbivores from spatial data
-livestocklist<-c('Bos.taurus','Capra.aegagrus','Ovis.aries')
-herbivore_dataset3<-herbivore_dataset3[[which(names(herbivore_dataset3)%in%livestocklist==F)]]
+#livestocklist<-c('Bos.taurus','Capra.aegagrus','Ovis.aries')
+#herbivore_dataset3<-herbivore_dataset3[[which(names(herbivore_dataset3)%in%livestocklist==F)]]
 
 
 
@@ -183,18 +185,18 @@ levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))
 # #Phylogeny --------------------------------------------------------------
 
 #Read in phylogeny
-phylogeny<-read.tree('Phylogeny/BestTree_Yet2.newick')
+phylogeny<-read.tree('Phylogeny/BestTree.newick')
 plot(phylogeny)
 phylogeny$tip.label
 
 #Change format of tip.labels to match species data
 phylogeny$tip.label<-gsub('_','.',phylogeny$tip.label)
 
-#Match synonym names #Not complete
-phylogeny$tip.label[phylogeny$tip.label=="Chen.canagica"]<- "Anser.canagicus"
+#Match synonym names #Complete
+phylogeny$tip.label[phylogeny$tip.label=="Anas.querquedula"] <- "Spatula.querquedula"
 phylogeny$tip.label[phylogeny$tip.label=="Anser.cygnoides"]<-  "Anser.cygnoid"
-phylogeny$tip.label[phylogeny$tip.label=="Chen.rossii"]<- "Anser.rossii" 
-phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.parryii"
+#phylogeny$tip.label[phylogeny$tip.label=="Chen.rossii"]<- "Anser.rossii" 
+#phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.parryii"
 
 
 #Convert raster stack to community dataframe
@@ -207,6 +209,8 @@ phydata<-match.phylo.comm(phylogeny,communitydata)
 
 ###
 ##Check through the dropped species carefully and fix any that are errors.###
+###Checked, No errors, extra species in phylogeny should be dropped.
+#
 ##Locate spatial data for those that are missing
 ###
 
@@ -221,6 +225,7 @@ phydivraster<-mask(phydivraster,speciesrichness,maskvalue=NA)
 levelplot(phydivraster,par.settings=YlOrRdTheme,margin=F)+
   layer(sp.polygons(bPolslaea))
 
+
 #Stack together - each as a proportion of the total species richness or phylogeney branch length
 diversitystack<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/sum(phylogeny$edge.length))
 names(diversitystack)<-c('Species richness','Phylogenetic diversity')
@@ -228,7 +233,54 @@ names(diversitystack)<-c('Species richness','Phylogenetic diversity')
 levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
 
+####-------------------Functional Diversity------------------------------###
 
+#Read in Functional Dendrogram
+ftt<-read.tree('functional_tree.nwk')
+plot(ftt)
+ftt$tip.label
+
+#Change format of tip.labels to match species data
+ftt$tip.label<-gsub('_','.',ftt$tip.label)
+
+#Convert raster stack to community dataframe
+communitydata<- getValues(herbivore_dataset3)
+#Replace NA with 0
+communitydata[is.na(communitydata)]<-0
+
+#Use vegan to trim community and functional data
+fttdata<-match.phylo.comm(ftt,communitydata)
+
+#Calculate phylogenetic diversity
+fundiv<-pd(fttdata$comm,fttdata$phy,include.root=T)
+
+#Rasterize this
+fundivraster<-raster(speciesrichness)
+fundivraster<-setValues(fundivraster,fundiv$PD)
+fundivraster<-mask(fundivraster,speciesrichness,maskvalue=NA)
+
+levelplot(fundivraster,par.settings=YlOrRdTheme,margin=F)+
+  layer(sp.polygons(bPolslaea))
+
+#Stack together - each as a proportion of the total species richness or phylogeney branch length
+diversitystack3<-stack(speciesrichness/nlayers(herbivore_dataset3),fundivraster/sum(ftt$edge.length))
+names(diversitystack3)<-c('Species richness','Functional diversity')
+
+levelplot(diversitystack3,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))
+
+
+
+#If I do 3 then its a proportion of all three operation? Results look odd
+#Stack together - each as a proportion of the total species richness or phylogeney branch length
+diversitystack2<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/sum(phylogeny$edge.length),fundivraster/sum(ftt$edge.length))
+names(diversitystack2)<-c('Species richness','Phylogenetic diversity','Functional diversity')
+
+levelplot(diversitystack2,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))
+
+
+####--------------------------------------------------------------------###
 
 # Diversity pairplots -----------------------------------------------------
 diversitydata<-data.frame(getValues(diversitystack))
@@ -322,7 +374,7 @@ plot(hc1)
 #Cut tree (check optimal number of clusters first)
 optclust<-NbClust(dist1,method='ward.D',index='cindex',min.nc=2,max.nc=10)#9
 optclust
-clusters<-cutree(hc1,k=9)
+clusters<-cutree(hc1,k=10)
 
 #Make a raster layer for cluster and populate it 
 speciesclusts<-speciesrichness

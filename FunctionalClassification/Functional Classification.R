@@ -82,11 +82,15 @@ arcborphy$tip.label
 ### Synonyms
 
 arcborphy$tip.label[arcborphy$tip.label=="Anas_querquedula"] <- "Spatula_querquedula"
-arcborphy$tip.label[arcborphy$tip.label=="Anser_cygnoides"] <- "Anser cygnoid"
+arcborphy$tip.label[arcborphy$tip.label=="Anser_cygnoides"] <- "Anser_cygnoid"
 
 
+#tipdrops<- c("Alces_americanus,Dendrocygna_bicolor,Camptorhynchus_labradorius,
+            # Tetrao_parvirostris,Anas_penelope")
 
-arcborphy$tip.label
+#arcboriphy<- drop.tip(arcborphy,tipdrops)
+
+#arcboriphy$tip.label
 ###  End
 
 # #Change format of tip.labels to match trait data
@@ -96,10 +100,12 @@ rownames(Traits)<-Traits$Binomial
  
 
 matched<-match.phylo.data(arcborphy,Traits)
+
+
 # 
 phyEstimate(matched$phy,matched$data$Litter_clutch_size[!is.na(matched$data$Litter_clutch_size)])
-# t2<-Traits[!is.na(Traits$Litter_clutch_size) & !is.na(Traits$body_mass),c(7,11)]
-# phyEstimate(arcborphy,t2)
+t2<-Traits[!is.na(Traits$Litter_clutch_size) & !is.na(Traits$body_mass),c(7,11)]
+phyEstimate(arcborphy,t2)
 
 #Multivariate
 #missMDA
@@ -240,3 +246,7 @@ borarcherb_functree<-(as.phylo(hc_2$call$t$tree))
 x11(5,30)
 plot(borarcherb_functree,no.margin=T)
 write.tree(borarcherb_functree,file="functional_tree",)
+
+#TRY FOR FD
+
+FunctionalDendrogram<- as.hclust.HCPC(hc_2)
