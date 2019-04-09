@@ -263,26 +263,26 @@ levelplot(fundivraster,par.settings=YlOrRdTheme,margin=F)+
   layer(sp.polygons(bPolslaea))
 
 #Stack together - each as a proportion of the total species richness or phylogeney branch length
-diversitystack3<-stack(speciesrichness/nlayers(herbivore_dataset3),fundivraster/sum(ftt$edge.length))
-names(diversitystack3)<-c('Species richness','Functional diversity')
+diversitystack2<-stack(speciesrichness/nlayers(herbivore_dataset3),fundivraster/sum(ftt$edge.length))
+names(diversitystack2)<-c('Species richness','Functional diversity')
 
-levelplot(diversitystack3,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+levelplot(diversitystack2,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
 
 
 
 #If I do 3 then its a proportion of all three operation? Results look odd
 #Stack together - each as a proportion of the total species richness or phylogeney branch length
-diversitystack2<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/sum(phylogeny$edge.length),fundivraster/sum(ftt$edge.length))
-names(diversitystack2)<-c('Species richness','Phylogenetic diversity','Functional diversity')
+diversitystack3<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/sum(phylogeny$edge.length),fundivraster/sum(ftt$edge.length))
+names(diversitystack3)<-c('Species richness','Phylogenetic diversity','Functional diversity')
 
-levelplot(diversitystack2,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+levelplot(diversitystack3,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
 
 
 ####--------------------------------------------------------------------###
 
-# Diversity pairplots -----------------------------------------------------
+# Phylogenetic Diversity pairplots ----------------------------------------
 diversitydata<-data.frame(getValues(diversitystack))
 
 diversitydata$biomeval<-getValues(simplebiome)
@@ -358,6 +358,105 @@ vio2<-ggplot(data=viodat[!is.na(viodat$biome),],aes(x=as.factor(biome),y=pdresid
 vio2
 
 detach(package:ggplot2)#Avoiding conflict with plotting spatial objects 
+
+
+####----------------Functional Diversity pairplots ----------------------#######
+diversitydata2<-data.frame(getValues(diversitystack2))
+
+diversitydata2$biomeval<-getValues(simplebiome)
+
+with(diversitydata2,plot(Species.richness,Functional.diversity,type='n')) #Very low PD in sites with low SR - only birds in these?
+with(diversitydata2[diversitydata2$biomeval==6,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='tan4'))
+with(diversitydata2[diversitydata2$biomeval==11,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='green3'))
+legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
+
+#Linear model
+lmFDSR<-with(diversitydata2,lm(Functional.diversity~Species.richness))
+summary(lmFDSR)
+newdat2<-data.frame(Species.richness=seq(min(diversitydata2$Species.richness,na.rm=T),max(diversitydata2$Species.richness,na.rm=T),length.out=100))
+newdat2$predfd_lin<-predict(lmFDSR,newdata=newdat2)
+lines(newdat2$Species.richness,newdat2$predfd_lin) #Logarithmic is best
+
+#Log model
+logmFDSR<-with(diversitydata2,lm(Functional.diversity~log(Species.richness)))
+summary(logmFDSR)
+newdat2$predfd_log<-predict(logmFDSR,newdata=newdat2)
+lines(newdat2$Species.richness,newdat2$predfd_log) #Logarithmic is best
+
+#Functional diversity in relation to species richness
+fdresiduals<-residuals(lmFDSR)
+fdresidualsraster<-raster(speciesrichness)
+fdresidualsraster[!is.na(speciesrichness)]<-fdresiduals
+fdresidualsraster<-mask(fdresidualsraster,speciesrichness,maskvalue=NA)
+
+#Make a function to plot diverging colour scales around 0 
+diverge0 <- function(p, ramp) {
+  require(RColorBrewer)
+  require(rasterVis)
+  if(length(ramp)==1 && is.character(ramp) && ramp %in% 
+     row.names(brewer.pal.info)) {
+    ramp <- suppressWarnings(colorRampPalette(rev(brewer.pal(11, ramp))))
+  } else if(length(ramp) > 1 && is.character(ramp) && all(ramp %in% colors())) {
+    ramp <- colorRampPalette(ramp)
+  } else if(!is.function(ramp)) 
+    stop('ramp should be either the name of a RColorBrewer palette, ', 
+         'a vector of colours to be interpolated, or a colorRampPalette.')
+  rng <- range(p$legend[[1]]$args$key$at)
+  s <- seq(-max(abs(rng)), max(abs(rng)), len=1001)
+  i <- findInterval(rng[which.min(abs(rng))], s)
+  zlim <- switch(which.min(abs(rng)), `1`=i:(1000+1), `2`=1:(i+1))
+  p$legend[[1]]$args$key$at <- s[zlim]
+  p$par.settings$regions$col <- ramp(1000)[zlim[-length(zlim)]]
+  p
+}
+
+
+#Plot to show where FD is greater/lower than expected given species richness
+pfp<-levelplot(fdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))
+diverge0(pfp,'RdBu') #Odd patterns, it apears that The highest ammount of FD relative to SR is in the middle of the distribution
+
+meltdat2<-melt(diversitydata2,measure.vars=c('Species.richness','Functional.diversity'))
+
+require(ggplot2)
+vio3<-ggplot(data=meltdat2[!is.na(meltdat2$biomeval),],
+             aes(y=value, x=as.factor(biomeval),fill=variable))+
+  geom_violin()+
+  scale_x_discrete(labels=c("Tundra","Boreal forest"),
+                   name="Biome") +
+  scale_y_continuous('Diversity (proportion of total)')+
+  scale_fill_discrete(name = "Diversity")
+vio3 #Tundra has low species richness but high PD
+
+viodat2<-data.frame(cbind(fdresiduals,biome=diversitydata2$biomeval[!is.na(diversitydata2$Species.richness)]))
+vio4<-ggplot(data=viodat[!is.na(viodat2$biome),],aes(x=as.factor(biome),y=pdresiduals))+geom_violin()+
+  scale_x_discrete(labels=c("Tundra","Boreal forest"),
+                   name="Biome") +
+  scale_y_continuous('Residuals of FD~SR')
+vio4
+
+detach(package:ggplot2)#Avoiding conflict with plotting spatial objects 
+
+
+######------------------------Latitudinal Comparisons------------------####
+
+
+#---------------------------------Functional------------------------------#
+
+Functionaldata<-data.frame(getValues(fundivraster))
+Functionaldata$biomeval<-getValues(simplebiome)
+
+colnames(Functionaldata) <- c("FD", "biomeval")
+
+with(Functionaldata,plot(Species.richness,Functional.diversity,type='n')) #Very low PD in sites with low SR - only birds in these?
+with(diversitydata2[diversitydata2$biomeval==6,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='tan4'))
+with(diversitydata2[diversitydata2$biomeval==11,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='green3'))
+legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
+
+
+
+
+#######-----------------------------END--------------------------------####
 
 # Species based cluster analysis ------------------------------------------
 

@@ -249,4 +249,4 @@ write.tree(borarcherb_functree,file="functional_tree",)
 
 #TRY FOR FD
 
-FunctionalDendrogram<- as.hclust.HCPC(hc_2)
+#FunctionalDendrogram<- as.hclust.HCPC(hc_2)
