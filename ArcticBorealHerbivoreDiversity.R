@@ -181,6 +181,16 @@ bPolslaea<-spTransform(bPols,crs(speciesrichness))
 levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
 
+####-----------------------------Basic Rester Descriptive stats-------------####
+
+cellStats(speciesrichness, stat='mean', na.rm=TRUE, asSample=TRUE)
+cellStats(speciesrichness, stat='max', na.rm=TRUE, asSample=TRUE)
+cellStats(speciesrichness, stat='min', na.rm=TRUE, asSample=TRUE)
+
+srfrequency <- data.frame(freq(speciesrichness))
+sum(srfrequency$count)
+
+#### to obtain number of cells, subtract NA cell count from total sum of count
 
 # #Phylogeny --------------------------------------------------------------
 
@@ -237,7 +247,7 @@ levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
 
 #Read in Functional Dendrogram
 ftt<-read.tree('functional_tree.nwk')
-plot(ftt)
+#plot(ftt)
 ftt$tip.label
 
 #Change format of tip.labels to match species data

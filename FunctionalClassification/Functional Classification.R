@@ -242,11 +242,12 @@ summary(res.famd)
 hc_2<-HCPC(res.famd,method='ward',metric='euclidean',consol=T,nb.clust=-1) # Hierarchical Clustering on Principle Components
 plot(hc_2)
 
+hc_2$desc.var$test.chi2
+hc_2$desc.var$category
+hc_2$desc.ind$para
+hc_2$desc.ind$dist
+
 borarcherb_functree<-(as.phylo(hc_2$call$t$tree))
 x11(5,30)
 plot(borarcherb_functree,no.margin=T)
-write.tree(borarcherb_functree,file="functional_tree",)
-
-#TRY FOR FD
-
-#FunctionalDendrogram<- as.hclust.HCPC(hc_2)
+#write.tree(borarcherb_functree,file="functional_tree",)
