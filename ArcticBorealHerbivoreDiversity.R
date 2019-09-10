@@ -153,6 +153,11 @@ names(herbivore_dataset3)[which(names(herbivore_dataset3)%in%spplist1==F)]#These
 #Simple biome map
 simplebiome<-rasterize(northernecosystemspp,herbivore_dataset3,field='BIOME')
 
+#Conservation of Arctic Flora and Fauna Working Group (2010) CAFF Map No.53 - Boundaries of the geographic area covered by the Arctic Biodiversity Assessment.
+arczones<-readOGR('Biomes/ABA-Boundaries','Arctic_Zones')
+arczones_laea<-spTransform(arczones,polarproj)
+#Subarctic lower boundary
+subarcbound<-arczones_laea[arczones_laea@data$Zone=='Sub arctic',]
 
 # Species diversity analysis ----------------------------------------------
 
@@ -179,9 +184,12 @@ bPols <- map2SpatialPolygons(boundaries, IDs=IDs,
 bPolslaea<-spTransform(bPols,crs(speciesrichness))
 
 levelplot(speciesrichness,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
-  layer(sp.polygons(bPolslaea))
+  layer(sp.polygons(bPolslaea))+
+  #layer(sp.polygons(arczones_laea,lty=2))+
+  layer(sp.polygons(subarcbound))
 
-####-----------------------------Basic Rester Descriptive stats-------------####
+
+####-----------------------------Basic Raster Descriptive stats-------------####
 
 cellStats(speciesrichness, stat='mean', na.rm=TRUE, asSample=TRUE)
 cellStats(speciesrichness, stat='max', na.rm=TRUE, asSample=TRUE)
@@ -233,7 +241,9 @@ phydivraster<-setValues(phydivraster,phydiv$PD)
 phydivraster<-mask(phydivraster,speciesrichness,maskvalue=NA)
 
 levelplot(phydivraster,par.settings=YlOrRdTheme,margin=F)+
-  layer(sp.polygons(bPolslaea))
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.polygons(arczones_laea,lty=2))
+
 
 
 #Stack together - each as a proportion of the total species richness or phylogeney branch length
