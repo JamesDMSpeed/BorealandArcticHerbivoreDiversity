@@ -42,6 +42,11 @@ northernecosystems<-crop(tundraboreal,extent(-180,180,40,90))#Remove southern he
 northernecosystemspp<-spTransform(northernecosystems,polarproj)
 #plot(northernecosystemspp)
 
+#Regions
+regions<-readOGR('CMEC regions & realms','Regions')
+regionspp<-spTransform(regions,polarproj)
+regionAB<-crop(regionspp,northernecosystemspp)
+
 
 # Species data ------------------------------------------------------------
 
@@ -253,7 +258,7 @@ names(diversitystack)<-c('Species richness','Phylogenetic diversity')
 levelplot(diversitystack,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
   layer(sp.polygons(bPolslaea))
 
-####-------------------Functional Diversity------------------------------###
+####-------------------Functional Diversity------------------------------####
 
 #Read in Functional Dendrogram
 ftt<-read.tree('functional_tree.nwk')
@@ -478,7 +483,9 @@ legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
 
 #######-----------------------------END--------------------------------####
 
-# Species based cluster analysis ------------------------------------------
+# Cluster analysis ------------------------------------------
+
+###Species
 
 #Community data
 herbcomdata<-getValues(herbivore_dataset3)
@@ -506,16 +513,151 @@ rat <- levels(rat_speciesclusts)[[1]]
 rat$clusterID<-rat$ID
 levels(rat_speciesclusts)<-rat
 #Set colours
-mycol<-c(brewer.pal(8,'Dark2'),1)
+mycol<-c(brewer.pal(8,'Dark2'),1,2)
 #Plot with country and ecozone outlines
-polyCentroids = gCentroid(northernecosystemspp,byid=T)
-levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F),colorkey=list(title='Cluster'),scales=list(draw=F))+
+#polyCentroids = gCentroid(northernecosystemspp,byid=T)
+levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F),colorkey=list(title='Cluster'))+
   layer(sp.polygons(bPolslaea,col=grey(0.5)))+
-  layer(sp.polygons(northernecosystemspp,lwd=1,lty=2,col='blue'))#+
-  #layer(sp.text(polyCentroids@coords,northernecosystemspp$ECO_NAME))
+  layer(sp.polygons(arczones_laea,lty=2))
+#layer(sp.polygons(northernecosystemspp,lwd=1,lty=2,col='blue'))#+
+#layer(sp.text(polyCentroids@coords,northernecosystemspp$ECO_NAME))
 
 
 #Plot the cluster dendrogram
 #hc1$labels<-rep('llllllllllllllll',times=length(hc1$height)) #Bodge a coloured bar as a label
 #plot(as.phylo(hc1),tip.color=mycol[clusters],cex=0.5,no.margin=T)
 #plot(hc1)
+
+
+#PhyloSorrensen similarity index
+
+#phylosor1<-function (samp, tree) 
+{
+  if (is.null(tree$edge.length)) {
+    stop("Tree has no branch lengths, cannot compute pd")
+  }
+  if (!is.rooted(tree)) {
+    stop("Rooted phylogeny required for phylosor calculation")
+  }
+  samp <- as.matrix(samp)
+  s <- nrow(samp)
+  phylodist <- matrix(NA, s, s)
+  rownames(phylodist) <- rownames(samp)
+  colnames(phylodist) <- rownames(samp)
+  samp_comb <- matrix(NA, s * (s - 1)/2, ncol(samp))
+  colnames(samp_comb) <- colnames(samp)
+  i <- 1
+  for (l in 1:(s - 1)) {
+    print(paste('l=',l))
+    for (k in (l + 1):s) {
+      samp_comb[i, ] <- samp[l, ] + samp[k, ]
+      i <- i + 1
+    }
+  }
+  pdsamp <- pd(samp, tree)
+  pdsamp_comb <- pd(samp_comb, tree)
+  i <- 1
+  for (l in 1:(s - 1)) {
+    pdl <- pdsamp[l, "PD"]
+    for (k in (l + 1):s) {
+      print(paste('k=',k))
+      pdk <- pdsamp[k, "PD"]
+      pdcomb <- pdsamp_comb[i, "PD"]
+      pdsharedlk <- pdl + pdk - pdcomb
+      phylodist[k, l] = 2 * pdsharedlk/(pdl + pdk)
+      i <- i + 1
+    }
+  }
+  return(as.dist(phylodist))
+}
+
+#pd_sor1<-phylosor1(phydata$comm[rowSums(phydata$comm)>1,],phydata$phy)#Only for sites with >1sppp
+#fd_sor1<-phylosor1(fttdata$comm[rowSums(fttdata$comm)>1,],fttdata$phy)
+
+#pd_sor<-phylosor(phydata$comm[rowSums(phydata$comm)>1,],phydata$phy)#Only for sites with >1sppp
+#fd_sor<-phylosor(fttdata$comm[rowSums(fttdata$comm)>1,],fttdata$phy)#Only for sites with >1sppp
+
+
+#Convert phylogenetic similarity into distances
+#pd_sor_dist<-1-pd_sor
+#fd_sor_dist<-1-fd_sor
+
+#Write to file
+#write.csv(as.matrix(dist1),'SpDistances.csv')
+#write.csv(as.matrix(pd_sor_dist),'PdDistances.csv')
+#write.csv(as.matrix(fd_sor_dist),'FdDistances.csv')
+
+#To reimport distance matrices
+sd2<-data.matrix(read.csv('SpDistances.csv'))
+spdist<-as.dist(sd2[,2:ncol(sd2)])
+pd2<-data.matrix(read.csv('PdDistances.csv'))
+pddist<-as.dist(pd2[,2:ncol(pd2)])
+fd2<-data.matrix(read.csv('FdDistances.csv'))
+fddist<-as.dist(fd2[,2:ncol(fd2)])
+
+spclusts<-hclust(spdist,method='ward.D')
+pdclusts<-hclust(pddist,method='ward.D')                 
+fdclusts<-hclust(fddist,method='ward.D')
+
+par(mfrow=c(1,3))
+plot(spclusts,ylim=c(0,1),main='Species')
+plot(pdclusts,ylim=c(0,1),main='Phylogenetic')
+plot(fdclusts,ylim=c(0,1),main='Functional')
+
+# Optimal number of clusters ----------------------------------------------
+
+require(NbClust)
+indexchoice<-'cindex'
+methodchoice<-'ward.D2'
+nbSpp<-NbClust(diss=spdist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
+nbPD<-NbClust(diss=pddist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
+nbFD<-NbClust(diss=fddist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
+
+nbSpp
+nbPD
+nbFD
+clusters<-c(nbSpp$Best.nc[1],nbPD$Best.nc[1],nbFD$Best.nc[1])
+clusters
+
+#Cut tree with optimum number of clusters
+spclusts<-hclust(spdist,method=methodchoice)
+pdclusts<-hclust(pddist,method=methodchoice)
+fdclusts<-hclust(fddist,method=methodchoice)
+spgroups<-cutree(spclusts,nbSpp$Best.nc[1])
+pdgroups<-cutree(pdclusts,nbPD$Best.nc[1])
+fdgroups<-cutree(fdclusts,nbFD$Best.nc[1])
+
+#Set up vector to populate
+r1<-raster(speciesrichness)
+spprich<-rowSums(phydata$comm)
+spprich[spprich<2]<-NA
+
+spgroupvalues<-spprich
+pdgroupvalues<-spprich
+fdgroupvalues<-spprich
+spgroupvalues[!is.na(spgroupvalues)]<-spgroups
+pdgroupvalues[!is.na(pdgroupvalues)]<-pdgroups
+fdgroupvalues[!is.na(fdgroupvalues)]<-fdgroups
+
+sp_sorras<-setValues(r1,spgroupvalues)
+pd_sorras<-setValues(r1,pdgroupvalues)
+fd_sorras<-setValues(r1,fdgroupvalues)
+
+np<-SpatialPoints(cbind(0,0))
+clustpal<-rasterTheme(region=(c(brewer.pal(8,'Dark2'),'black','red','blue','green')))
+levelplot(stack(sp_sorras,pd_sorras,fd_sorras),par.settings=clustpal,colorkey=F,names.attr=c('Species','Phylogenetic','Functional'),scales=(list(draw=F)))+
+    layer(sp.polygons(arczones_laea,lty=2))+
+    layer(sp.points(np,col=1))+
+    layer(sp.polygons(regionAB))
+
+#Plot showing biome and regional boundaries
+r1<-speciesrichness
+r1[r1>0]<-1
+r1[r1==0]<-NA
+levelplot(r1,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(noreco_shppp))+
+  layer(sp.polygons(arczones_laea,col='red'))+
+  layer(sp.polygons(regionAB,col='blue'))+
+  layer(sp.points(np))
+
+
