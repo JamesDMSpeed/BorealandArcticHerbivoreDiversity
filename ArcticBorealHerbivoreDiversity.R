@@ -587,6 +587,7 @@ levelplot(rat_speciesclusts,att='clusterID',col.regions=mycol,scales=list(draw=F
 #write.csv(as.matrix(pd_sor_dist),'PdDistances.csv')
 #write.csv(as.matrix(fd_sor_dist),'FdDistances.csv')
 
+#These files are available here https://ntnu.box.com/s/9jpqhxpwh51a8lw2ehlactx9ymtk8hkq
 #To reimport distance matrices
 sd2<-data.matrix(read.csv('SpDistances.csv'))
 spdist<-as.dist(sd2[,2:ncol(sd2)])
