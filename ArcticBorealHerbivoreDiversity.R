@@ -302,7 +302,8 @@ diversitystack3<-stack(speciesrichness/nlayers(herbivore_dataset3),phydivraster/
 names(diversitystack3)<-c('Species richness','Phylogenetic diversity','Functional diversity')
 
 levelplot(diversitystack3,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
-  layer(sp.polygons(bPolslaea))
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.polygons(arczones_laea,lty=2))
 
 
 ####--------------------------------------------------------------------###
@@ -313,9 +314,9 @@ diversitydata<-data.frame(getValues(diversitystack))
 diversitydata$biomeval<-getValues(simplebiome)
 
 with(diversitydata,plot(Species.richness,Phylogenetic.diversity,type='n')) #Very low PD in sites with low SR - only birds in these?
-with(diversitydata[diversitydata$biomeval==6,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='tan4'))
-with(diversitydata[diversitydata$biomeval==11,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='green3'))
-legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
+with(diversitydata[diversitydata$biomeval==6,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='green3'))
+with(diversitydata[diversitydata$biomeval==11,],points(Species.richness,Phylogenetic.diversity,pch=16,cex=0.5,col='tan4'))
+legend('bottomr',pch=16,col=c('green3','tan4'),c('Forest','Tundra'))
 
 #Linear model
 lmPDSR<-with(diversitydata,lm(Phylogenetic.diversity~Species.richness))
@@ -359,8 +360,9 @@ diverge0 <- function(p, ramp) {
 
 
 #Plot to show where PD is greater/lower than expected given species richness
-pdp<-levelplot(pdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
-  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))
+pdp<-levelplot(pdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F),main='Phylogenetic diversity')+
+  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))+
+  layer(sp.polygons(arczones_laea,lty=2))
 diverge0(pdp,'RdBu') #Higher PD than expected in Quebec. Lower than expected in Siberia. Also W coast of Norway
 
 meltdat<-melt(diversitydata,measure.vars=c('Species.richness','Phylogenetic.diversity'))
@@ -391,9 +393,9 @@ diversitydata2<-data.frame(getValues(diversitystack2))
 diversitydata2$biomeval<-getValues(simplebiome)
 
 with(diversitydata2,plot(Species.richness,Functional.diversity,type='n')) #Very low PD in sites with low SR - only birds in these?
-with(diversitydata2[diversitydata2$biomeval==6,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='tan4'))
-with(diversitydata2[diversitydata2$biomeval==11,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='green3'))
-legend('bottomr',pch=16,col=c('tan4','green3'),c('Tundra','Forest'))
+with(diversitydata2[diversitydata2$biomeval==6,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='green'))
+with(diversitydata2[diversitydata2$biomeval==11,],points(Species.richness,Functional.diversity,pch=16,cex=0.5,col='tan4'))
+legend('bottomr',pch=16,col=c('green3','tan4'),c('Forest','Tundra'))
 
 #Linear model
 lmFDSR<-with(diversitydata2,lm(Functional.diversity~Species.richness))
@@ -437,8 +439,9 @@ diverge0 <- function(p, ramp) {
 
 
 #Plot to show where FD is greater/lower than expected given species richness
-pfp<-levelplot(fdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
-  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))
+pfp<-levelplot(fdresidualsraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F),main='Functional diversity')+
+  layer(sp.polygons(bPolslaea,lwd=0.5,col=grey(0.5)))+
+  layer(sp.polygons(arczones_laea,lty=2))
 diverge0(pfp,'RdBu') #Odd patterns, it apears that The highest ammount of FD relative to SR is in the middle of the distribution
 
 meltdat2<-melt(diversitydata2,measure.vars=c('Species.richness','Functional.diversity'))
@@ -609,7 +612,7 @@ plot(fdclusts,ylim=c(0,1),main='Functional')
 
 require(NbClust)
 indexchoice<-'cindex'
-methodchoice<-'ward.D2'
+methodchoice<-'ward.D'
 nbSpp<-NbClust(diss=spdist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
 nbPD<-NbClust(diss=pddist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
 nbFD<-NbClust(diss=fddist,distance=NULL,method=methodchoice,min.nc=2,max.nc=12,index=indexchoice)
@@ -624,9 +627,18 @@ clusters
 spclusts<-hclust(spdist,method=methodchoice)
 pdclusts<-hclust(pddist,method=methodchoice)
 fdclusts<-hclust(fddist,method=methodchoice)
+par(mfrow=c(1,3))
+plot(spclusts)
+plot(pdclusts)
+plot(fdclusts)
+
 spgroups<-cutree(spclusts,nbSpp$Best.nc[1])
 pdgroups<-cutree(pdclusts,nbPD$Best.nc[1])
 fdgroups<-cutree(fdclusts,nbFD$Best.nc[1])
+spgroups<-cutree(spclusts,6)
+pdgroups<-cutree(pdclusts,6)
+fdgroups<-cutree(fdclusts,6)
+
 
 #Set up vector to populate
 r1<-raster(speciesrichness)
@@ -646,9 +658,11 @@ fd_sorras<-setValues(r1,fdgroupvalues)
 
 np<-SpatialPoints(cbind(0,0))
 clustpal<-rasterTheme(region=(c(brewer.pal(8,'Dark2'),'black','red','blue','green')))
+clustpal<-rasterTheme(region=(c(brewer.pal(6,'Dark2'))))
 levelplot(stack(sp_sorras,pd_sorras,fd_sorras),par.settings=clustpal,colorkey=F,names.attr=c('Species','Phylogenetic','Functional'),scales=(list(draw=F)))+
     layer(sp.polygons(arczones_laea,lty=2))+
     layer(sp.points(np,col=1))+
+    layer(sp.polygons(bPolslaea))+
     layer(sp.polygons(regionAB))
 
 #Plot showing biome and regional boundaries
@@ -656,9 +670,9 @@ r1<-speciesrichness
 r1[r1>0]<-1
 r1[r1==0]<-NA
 levelplot(r1,margin=F,scales=list(draw=F))+
-  layer(sp.polygons(noreco_shppp))+
   layer(sp.polygons(arczones_laea,col='red'))+
   layer(sp.polygons(regionAB,col='blue'))+
+  layer(sp.polygons(noreco_shppp))+
   layer(sp.points(np))
 
 
