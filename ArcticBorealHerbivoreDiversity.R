@@ -47,6 +47,13 @@ regions<-readOGR('CMEC regions & realms','Regions')
 regionspp<-spTransform(regions,polarproj)
 regionAB<-crop(regionspp,northernecosystemspp)
 
+#Productivity http://www.ntsg.umt.edu/project/modis/mod17.php
+globnpp_url<-('https://ntnu.box.com/shared/static/yo8wmtj09k1vqop2gpstlsv889wff2mp.tif')
+download.file(globnpp_url,'GlobNPP_AnnMean00_15.tif')
+globnpp<-raster('GlobNPP_AnnMean00_15.tif')
+#Rescale
+globnpps<-globnpp*0.1#http://files.ntsg.umt.edu/data/NTSG_Products/MOD17/GeoTIFF/MOD17A3/readme.txt 
+plot(globnpps)#g/m2/yr
 
 # Species data ------------------------------------------------------------
 
@@ -676,3 +683,7 @@ levelplot(r1,margin=F,scales=list(draw=F))+
   layer(sp.points(np))
 
 
+#Productivity
+globnpps[globnpps>5000]<-NA
+nppherb<-projectRaster(globnpps,herbivore_dataset3)
+plot(nppherb)
