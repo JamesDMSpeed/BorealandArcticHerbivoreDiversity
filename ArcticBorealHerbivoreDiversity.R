@@ -165,6 +165,51 @@ names(herbivore_dataset3)[which(names(herbivore_dataset3)%in%spplist1==F)]#These
 #Simple biome map
 simplebiome<-rasterize(northernecosystemspp,herbivore_dataset3,field='BIOME')
 
+#Convert boreal biome to points
+borealpoints<-rasterToPoints(simplebiome,fun=function(x)x==6,spatial=T)
+arcticpoints<-rasterToPoints(simplebiome,fun=function(x)x==11,spatial=T)
+plot(simplebiome)
+points(borealpoints,cex=0.1,pch=16)
+points(arcticpoints,cex=0.1,pch=16,col=2)
+
+#Distance to boreal and arctic
+distancetoBoreal<-distanceFromPoints(simplebiome,borealpoints)
+distancetoArctic<-distanceFromPoints(simplebiome,arcticpoints)
+plot(distancetoBoreal)
+plot(distancetoArctic)
+
+#Combine
+distanceToBiomeBoundary<-distancetoBoreal
+distanceToBiomeBoundary[distanceToBiomeBoundary==0]<-0-(distancetoArctic[distanceToBiomeBoundary==0])
+distanceToBiomeBoundary<-mask(distanceToBiomeBoundary,simplebiome)
+plot(distanceToBiomeBoundary)
+writeRaster(distanceToBiomeBoundary,'Biomes/DistnaceBiomeBoundary')
+
+pBB<-levelplot(distanceToBiomeBoundary,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(northernecosystemspp))
+diverge0 <- function(p, ramp) {
+  require(RColorBrewer)
+  require(rasterVis)
+  if(length(ramp)==1 && is.character(ramp) && ramp %in% 
+     row.names(brewer.pal.info)) {
+    ramp <- suppressWarnings(colorRampPalette(rev(brewer.pal(11, ramp))))
+  } else if(length(ramp) > 1 && is.character(ramp) && all(ramp %in% colors())) {
+    ramp <- colorRampPalette(ramp)
+  } else if(!is.function(ramp)) 
+    stop('ramp should be either the name of a RColorBrewer palette, ', 
+         'a vector of colours to be interpolated, or a colorRampPalette.')
+  rng <- range(p$legend[[1]]$args$key$at)
+  s <- seq(-max(abs(rng)), max(abs(rng)), len=1001)
+  i <- findInterval(rng[which.min(abs(rng))], s)
+  zlim <- switch(which.min(abs(rng)), `1`=i:(1000+1), `2`=1:(i+1))
+  p$legend[[1]]$args$key$at <- s[zlim]
+  p$par.settings$regions$col <- ramp(1000)[zlim[-length(zlim)]]
+  p
+}
+diverge0(pBB,'RdBu')
+
+
+
 #Conservation of Arctic Flora and Fauna Working Group (2010) CAFF Map No.53 - Boundaries of the geographic area covered by the Arctic Biodiversity Assessment.
 arczones<-readOGR('Biomes/ABA-Boundaries','Arctic_Zones')
 arczones_laea<-spTransform(arczones,polarproj)

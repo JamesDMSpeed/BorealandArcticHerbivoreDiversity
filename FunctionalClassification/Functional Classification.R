@@ -9,7 +9,7 @@ require(missMDA)#Multivariate imputation
 #Load and clean data####
 
 #Preliminary trait table - downloaded on 7th Feb 2019
-traittable<-read.csv('Functionalclassification/TraitTableFeb2019.csv',
+traittable<-read.csv('FunctionalClassification/TraitTableFeb2019.csv',
                      header=T, na.strings=c("","NA"))
 View(traittable)
 names(traittable)
@@ -251,3 +251,5 @@ borarcherb_functree<-(as.phylo(hc_2$call$t$tree))
 x11(5,30)
 plot(borarcherb_functree,no.margin=T)
 #write.tree(borarcherb_functree,file="functional_tree",)
+
+write.csv(res.famd$ind$coord,'FunctionalClassification/FAMD_coords.csv')

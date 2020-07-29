@@ -1,0 +1,26 @@
+[general]
+creator=R package 'raster'
+created=2020-07-29 14:02:47
+[georeference]
+nrows=87
+ncols=100
+xmin=-5184528.26941256
+ymin=-4009133.62717433
+xmax=4815471.73058744
+ymax=4690866.37282567
+projection=+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0
+[data]
+datatype=FLT4S
+byteorder=little
+nbands=1
+bandorder=BIL
+categorical=FALSE
+minvalue=-1345362.40470737
+maxvalue=2193171.21994613
+nodatavalue=-3.4e+38
+[legend]
+legendtype=
+values=
+color=
+[description]
+layername=layer
