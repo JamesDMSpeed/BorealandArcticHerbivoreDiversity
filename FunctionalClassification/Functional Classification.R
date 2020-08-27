@@ -70,6 +70,8 @@ Traits$Elton.Plant_Others[Traits$Elton.Plant_Others=="Mentiones in HB of B that 
 Traits$Elton.Plant_Others[Traits$Elton.Plant_Others=="ND"]<-NA
 Traits$Elton.Plant_Others<-as.numeric(as.character(Traits$Elton.Plant_Others))
 
+write.csv(Traits,'FunctionalClassification/traits_cor.csv')
+
 #Imputing missing data####
 
 #Phylogenetics
