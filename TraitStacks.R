@@ -14,6 +14,8 @@ require(maptools)#Background world map
 require(rgeos)#Crop biomes map
 require(reshape2)#Data manipulation
 require(FD)
+require(piecewiseSEM)#SEM
+
 
 
 # Set up ------------------------------------------------------------------
@@ -245,13 +247,14 @@ traitdf1<-traitdf[rownames(traitdf)%in%names(s2),]#Remove empty species from tra
 
 funcdiv<-dbFD(x=traitdf1[,c(1:2,5,11:15)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
 funcdiv<-dbFD(x=traitdf1[,c(3:4)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
-funcdiv<-dbFD(x=traitdf1,a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
+funcdiv<-dbFD(x=traitdf1,a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F,CWM.type = 'all')#Abundance of all ordinal traits.
 
 
 #Fill raster with FD indices
 dfFD<-data.frame(ID=speciescoms$ID,FDiv=funcdiv$FDiv,FRic=funcdiv$FRic,FEve=funcdiv$FEve,FDis=funcdiv$FDis,RaoQ=funcdiv$RaoQ)#Dataframe with Fdiv indices and cell numbers
+dfFDCWM<-cbind(dfFD,funcdiv$CWM)
 df2<-data.frame(cell=seq(1,ncell(herbivore_dataset3[[1]]),1))#Dataframe with all (inc NA) cells
-m1<-merge(df2,dfFD,by.x='cell',by.y='ID',all.x=T)#Merge together
+m1<-merge(df2,dfFDCWM,by.x='cell',by.y='ID',all.x=T)#Merge together
 dummyras<-herbivore_dataset3[[1]]
 fdivras<-setValues(dummyras,m1$FDiv)
 fricras<-setValues(dummyras,m1$FRic)
@@ -271,17 +274,43 @@ plot(meantraitstack$Body.Mass)
 
 
 
+#Temperature & NDVI etc 
+
+#Global BioClim 2.5deg
+bioclimdat<-getData('worldclim',var='bio',res=2.5)
+bioclimlaea<-projectRaster(bioclimdat,AllVars)
+bioclimlaea_m<-mask(crop(bioclimlaea,AllVars[[1]]),AllVars[[1]])
+plot(bioclimlaea_m[[1]])
+
+#Productivity
+globnpp_url<-('https://ntnu.box.com/shared/static/yo8wmtj09k1vqop2gpstlsv889wff2mp.tif')
+download.file(globnpp_url,'Biomes/GlobNPP_AnnMean00_15.tif',mode='wb')
+globnpp<-raster('Biomes/GlobNPP_AnnMean00_15.tif')
+#Rescale
+globnpps<-globnpp*0.1#http://files.ntsg.umt.edu/data/NTSG_Products/MOD17/GeoTIFF/MOD17A3/readme.txt 
+globnpps[globnpps==6553.5]<-NA#Set NAs
+plot(globnpps)#g/m2/yr  #Note missing data
+
+globnpp_laea<-projectRaster(globnpps,AllVars)
+globnpp_m<-mask(crop(globnpp_laea,AllVars[[1]]),AllVars[[1]])
+plot(globnpp_m)
+
+
 #Stack all up
-AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack)
-writeRaster(AllVars,'AnalysisVars/',by.layer=T,suffix=names(AllVars),overwrite=T)
+AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m)
 names(AllVars)[1]<-'DistanceBiomeBoundary'
+names(AllVars)[51]<-'NPP'
+writeRaster(AllVars,'AnalysisVars/',by.layer=T,suffix=names(AllVars),overwrite=T)
 names(AllVars)
 
 pairs(AllVars[[c(1:6,12)]])
 pairs(AllVars[[c(1:5,7:11)]])
 
-AllVars_ex<-extract(AllVars,1:ncell(AllVars),df=T)
-Av1<-AllVars_ex[!is.na(AllVars_ex$PC1),]
+AllVars_ext<-extract(AllVars,1:ncell(AllVars),df=T)
+cellsXY<-xyFromCell(AllVars,1:ncell(AllVars))
+AllVars_ex<-cbind(AllVars_ext,cellsXY)
+AllVars_ex1<-merge(AllVars_ex,m1,by.x='ID',by.y='cell')
+Av1<-AllVars_ex1[!is.na(AllVars_ex1$PC1),]
 write.csv(Av1,'AnalysisVariables.csv')
 Av1$DistanceBiomeBoundary_km<-Av1$DistanceBiomeBoundary/1000
 Av1$TreeShrubCover<-Av1$treeCover+Av1$ShrubCover
@@ -445,4 +474,304 @@ with(Av1,plot(ShrubCover,FEve,cex=0.1))
 with(Av1,plot(ShrubCover,RaoQ,cex=0.1))
 
 
-#Temperature & NDVI etc 
+par(mfrow=c(2,3))
+with(Av1,plot(bio10,FRic,cex=0.1))
+with(Av1,plot(bio10,FDiv,cex=0.1))
+with(Av1,plot(bio10,FDis,cex=0.1))
+with(Av1,plot(bio10,FEve,cex=0.1))
+with(Av1,plot(bio10,RaoQ,cex=0.1))
+
+par(mfrow=c(2,3))
+with(Av1,plot(bio12,FRic,cex=0.1))
+with(Av1,plot(bio12,FDiv,cex=0.1))
+with(Av1,plot(bio12,FDis,cex=0.1))
+with(Av1,plot(bio12,FEve,cex=0.1))
+with(Av1,plot(bio12,RaoQ,cex=0.1))
+
+par(mfrow=c(2,3))
+with(Av1,plot(NPP,FRic,cex=0.1))
+with(Av1,plot(NPP,FDiv,cex=0.1))
+with(Av1,plot(NPP,FDis,cex=0.1))
+with(Av1,plot(NPP,FEve,cex=0.1))
+with(Av1,plot(NPP,RaoQ,cex=0.1))
+
+with(Av1,plot(bio10,NPP))
+with(Av1,plot(bio10,DistanceBiomeBoundary_km))
+
+with(Av1,plot(treeCover,Use_of_vegetation_ground_vegetation,cex=0.1))
+with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_ground_vegetation),col=2))
+with(Av1,plot(treeCover,Use_of_vegetation_canopy,cex=0.1))
+with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_canopy),col=2))
+
+
+#Piecewise SEMs
+#Temp, NPP and woody plant cover as drivers of trait diversity in herbivore communities
+library(piecewiseSEM)
+library(nlme)
+
+#Drop NA rows
+semdf<-Av1[!is.na(Av1$FRic)&!is.na(Av1$NPP)&!is.na(Av1$bio1)&!is.na(Av1$ShrubCover),]
+dim(semdf)
+dim(Av1)
+
+sem_standdf<-semdf[,c(3:52,55:56)]
+sem_standdf<-data.frame(scale(sem_standdf,scale = T,center=T))
+sem_standdf<-cbind(sem_standdf,semdf[,53:54])#Add XY coords
+
+
+model <- psem(lm(FRic ~ bio10 + NPP + TreeShrubCover, semdf), lm(TreeShrubCover ~ bio10, semdf), lm(NPP ~ bio10, semdf))
+summary(model)
+coefs(model, standardize = "scale")
+coefs(model, standardize = "range")
+a$Estimate
+library(gstat)
+va<-variogram(FRic ~ bio10 + NPP + TreeShrubCover,data= semdf,locations= ~x+y)
+plot(va)
+
+
+model_stand <- psem(lm(FRic ~ bio10 + NPP + TreeShrubCover, sem_standdf), lm(TreeShrubCover ~ bio10, sem_standdf), lm(NPP ~ bio10, sem_standdf))
+summary(model_stand)
+vas<-variogram(FRic ~ bio10 + NPP + TreeShrubCover,data= sem_standdf,locations= ~x+y)
+plot(vas,smooth=T)
+
+
+#GLS
+#Fit GLS for all component models
+gls_1<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= semdf,correlation=corLin(form=~x+y, nugget=T), method="ML")
+gls_2<-gls(NPP ~ bio10, data= semdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_3<-gls(TreeShrubCover ~ bio10, data= semdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_list<-list(gls_1,gls_2,gls_3)
+psemlist1<-as.psem(gls_list)
+summary(psemlist1, .progressBar = T)
+
+#Spatial autocor?
+semdf$resids<-residuals(gls1)
+vario <- Variogram(gls_1, form = ~x + y, resType = "pearson")
+plot(vario,smooth=T)
+
+#Standardised
+
+#Find best correlation structure
+gls_stand_nc<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf, method="ML")
+gls_stand_exp<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_lin<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corLin(form=~x+y, nugget=T), method="ML")
+gls_stand_gau<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corGaus(form=~x+y, nugget=T), method="ML")
+gls_stand_rat<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corRatio(form=~x+y, nugget=T), method="ML")
+
+AIC(gls_stand_nc,gls_stand_exp,gls_stand_gau,gls_stand_rat)#corLin convergence error so ommitted
+#Exp has lowest AIC
+varioNull<-Variogram(gls_stand_nc,form=~x+y, resType="pearson")
+varioExp<-Variogram(gls_stand_exp,form=~x+y, resType="pearson")
+par(mfrow=c(1,2))
+plot(varioNull,smooth=T)
+plot(varioExp,smooth=T,add=T)
+
+#FRic
+gls_stand_FRic<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_FRic<-list(gls_stand_FRic,gls_stand_2,gls_stand_3)
+psem_stand_list1_FRic<-as.psem(gls_stand_list_FRic)
+ps_sum_FRic<-summary(psem_stand_list1_FRic, .progressBar = T)
+ps_sum_FRic
+vario_FRic<-Variogram(gls_stand_FRic,form= ~x +y,resType = "pearson")
+plot(vario_FRic,smooth=T)
+
+#FEve
+gls_stand_FEve<-gls(FEve ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_FEve<-list(gls_stand_FEve,gls_stand_2,gls_stand_3)
+psem_stand_list1_FEve<-as.psem(gls_stand_list_FEve)
+ps_sum_FEve<-summary(psem_stand_list1_FEve, .progressBar = T)
+ps_sum_FEve
+vario_FEve<-Variogram(gls_stand_FEve,form= ~x +y,resType = "pearson")
+plot(vario_FEve,smooth=T)
+
+#FDis
+gls_stand_FDis<-gls(FDis ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_FDis<-list(gls_stand_FDis,gls_stand_2,gls_stand_3)
+psem_stand_list1_FDis<-as.psem(gls_stand_list_FDis)
+ps_sum_FDis<-summary(psem_stand_list1_FDis, .progressBar = T)
+ps_sum_FDis
+vario_FDis<-Variogram(gls_stand_FDis,form= ~x +y,resType = "pearson")
+plot(vario_FDis,smooth=T)
+
+#FDiv
+gls_stand_FDiv<-gls(FDiv ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_FDiv<-list(gls_stand_FDiv,gls_stand_2,gls_stand_3)
+psem_stand_list1_FDiv<-as.psem(gls_stand_list_FDiv)
+ps_sum_FDiv<-summary(psem_stand_list1_FDiv, .progressBar = T)
+ps_sum_FDiv
+vario_FDiv<-Variogram(gls_stand_FDiv,form= ~x +y,resType = "pearson")
+plot(vario_FDiv,smooth=T)
+
+#RaoQ
+gls_stand_RaoQ<-gls(RaoQ ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_RaoQ<-list(gls_stand_RaoQ,gls_stand_2,gls_stand_3)
+psem_stand_list1_RaoQ<-as.psem(gls_stand_list_RaoQ)
+ps_sum_RaoQ<-summary(psem_stand_list1_RaoQ, .progressBar = T)
+ps_sum_RaoQ
+vario_RaoQ<-Variogram(gls_stand_RaoQ,form= ~x +y,resType = "pearson")
+plot(vario_RaoQ,smooth=T)
+
+#PC1
+gls_stand_PC1<-gls(PC1 ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_PC1<-list(gls_stand_PC1,gls_stand_2,gls_stand_3)
+psem_stand_list1_PC1<-as.psem(gls_stand_list_PC1)
+ps_sum_PC1<-summary(psem_stand_list1_PC1, .progressBar = T)
+ps_sum_PC1
+vario_PC1<-Variogram(gls_stand_PC1,form= ~x +y,resType = "pearson")
+plot(vario_PC1,smooth=T)
+
+#PC2
+gls_stand_PC2<-gls(PC2 ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_PC2<-list(gls_stand_PC2,gls_stand_2,gls_stand_3)
+psem_stand_list1_PC2<-as.psem(gls_stand_list_PC2)
+ps_sum_PC2<-summary(psem_stand_list1_PC2, .progressBar = T)
+ps_sum_PC2
+vario_PC2<-Variogram(gls_stand_PC2,form= ~x +y,resType = "pearson")
+plot(vario_PC2,smooth=T)
+
+#Body.Mass
+gls_stand_Body.Mass<-gls(Body.Mass ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Body.Mass<-list(gls_stand_Body.Mass,gls_stand_2,gls_stand_3)
+psem_stand_list1_Body.Mass<-as.psem(gls_stand_list_Body.Mass)
+ps_sum_Body.Mass<-summary(psem_stand_list1_Body.Mass, .progressBar = T)
+ps_sum_Body.Mass
+vario_Body.Mass<-Variogram(gls_stand_Body.Mass,form= ~x +y,resType = "pearson")
+plot(vario_Body.Mass,smooth=T)
+
+#Litter.Clutch.size
+gls_stand_Litter.Clutch.size<-gls(Litter.Clutch.size ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Litter.Clutch.size<-list(gls_stand_Litter.Clutch.size,gls_stand_2,gls_stand_3)
+psem_stand_list1_Litter.Clutch.size<-as.psem(gls_stand_list_Litter.Clutch.size)
+ps_sum_Litter.Clutch.size<-summary(psem_stand_list1_Litter.Clutch.size, .progressBar = T)
+ps_sum_Litter.Clutch.size
+vario_Litter.Clutch.size<-Variogram(gls_stand_Litter.Clutch.size,form= ~x +y,resType = "pearson")
+plot(vario_Litter.Clutch.size,smooth=T)
+
+
+#Shrubs_mean
+gls_stand_Shrubs_mean<-gls(Shrubs_mean ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Shrubs_mean<-list(gls_stand_Shrubs_mean,gls_stand_2,gls_stand_3)
+psem_stand_list1_Shrubs_mean<-as.psem(gls_stand_list_Shrubs_mean)
+ps_sum_Shrubs_mean<-summary(psem_stand_list1_Shrubs_mean, .progressBar = T)
+ps_sum_Shrubs_mean
+vario_Shrubs_mean<-Variogram(gls_stand_Shrubs_mean,form= ~x +y,resType = "pearson")
+plot(vario_Shrubs_mean,smooth=T)
+
+#Graminoids_mean
+gls_stand_Graminoids_mean<-gls(Graminoids_mean ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Graminoids_mean<-list(gls_stand_Graminoids_mean,gls_stand_2,gls_stand_3)
+psem_stand_list1_Graminoids_mean<-as.psem(gls_stand_list_Graminoids_mean)
+ps_sum_Graminoids_mean<-summary(psem_stand_list1_Graminoids_mean, .progressBar = T)
+ps_sum_Graminoids_mean
+vario_Graminoids_mean<-Variogram(gls_stand_Graminoids_mean,form= ~x +y,resType = "pearson")
+plot(vario_Graminoids_mean,smooth=T)
+
+#Forbs_mean
+gls_stand_Forbs_mean<-gls(Forbs_mean ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Forbs_mean<-list(gls_stand_Forbs_mean,gls_stand_2,gls_stand_3)
+psem_stand_list1_Forbs_mean<-as.psem(gls_stand_list_Forbs_mean)
+ps_sum_Forbs_mean<-summary(psem_stand_list1_Forbs_mean, .progressBar = T)
+ps_sum_Forbs_mean
+vario_Forbs_mean<-Variogram(gls_stand_Forbs_mean,form= ~x +y,resType = "pearson")
+plot(vario_Forbs_mean,smooth=T)
+
+#Bryophytes_mean
+gls_stand_Bryophytes_mean<-gls(Bryophytes_mean ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Bryophytes_mean<-list(gls_stand_Bryophytes_mean,gls_stand_2,gls_stand_3)
+psem_stand_list1_Bryophytes_mean<-as.psem(gls_stand_list_Bryophytes_mean)
+ps_sum_Bryophytes_mean<-summary(psem_stand_list1_Bryophytes_mean, .progressBar = T)
+ps_sum_Bryophytes_mean
+vario_Bryophytes_mean<-Variogram(gls_stand_Bryophytes_mean,form= ~x +y,resType = "pearson")
+plot(vario_Bryophytes_mean,smooth=T)
+
+#Lichens_mean
+gls_stand_Lichens_mean<-gls(Lichens_mean ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Lichens_mean<-list(gls_stand_Lichens_mean,gls_stand_2,gls_stand_3)
+psem_stand_list1_Lichens_mean<-as.psem(gls_stand_list_Lichens_mean)
+ps_sum_Lichens_mean<-summary(psem_stand_list1_Lichens_mean, .progressBar = T)
+ps_sum_Lichens_mean
+vario_Lichens_mean<-Variogram(gls_stand_Lichens_mean,form= ~x +y,resType = "pearson")
+plot(vario_Lichens_mean,smooth=T)
+
+#Shrubs_sum
+gls_stand_Shrubs_sum<-gls(Shrubs_sum ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Shrubs_sum<-list(gls_stand_Shrubs_sum,gls_stand_2,gls_stand_3)
+psem_stand_list1_Shrubs_sum<-as.psem(gls_stand_list_Shrubs_sum)
+ps_sum_Shrubs_sum<-summary(psem_stand_list1_Shrubs_sum, .progressBar = T)
+ps_sum_Shrubs_sum
+vario_Shrubs_sum<-Variogram(gls_stand_Shrubs_sum,form= ~x +y,resType = "pearson")
+plot(vario_Shrubs_sum,smooth=T)
+
+#Graminoid_sum
+gls_stand_Graminoid_sum<-gls(Graminoid_sum ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Graminoid_sum<-list(gls_stand_Graminoid_sum,gls_stand_2,gls_stand_3)
+psem_stand_list1_Graminoid_sum<-as.psem(gls_stand_list_Graminoid_sum)
+ps_sum_Graminoid_sum<-summary(psem_stand_list1_Graminoid_sum, .progressBar = T)
+ps_sum_Graminoid_sum
+vario_Graminoid_sum<-Variogram(gls_stand_Graminoid_sum,form= ~x +y,resType = "pearson")
+plot(vario_Graminoid_sum,smooth=T)
+
+#Forbs_sum
+gls_stand_Forbs_sum<-gls(Forbs_sum ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Forbs_sum<-list(gls_stand_Forbs_sum,gls_stand_2,gls_stand_3)
+psem_stand_list1_Forbs_sum<-as.psem(gls_stand_list_Forbs_sum)
+ps_sum_Forbs_sum<-summary(psem_stand_list1_Forbs_sum, .progressBar = T)
+ps_sum_Forbs_sum
+vario_Forbs_sum<-Variogram(gls_stand_Forbs_sum,form= ~x +y,resType = "pearson")
+plot(vario_Forbs_sum,smooth=T)
+
+#Bryophytes_sum
+gls_stand_Bryophytes_sum<-gls(Moss_sum ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Bryophytes_sum<-list(gls_stand_Bryophytes_sum,gls_stand_2,gls_stand_3)
+psem_stand_list1_Bryophytes_sum<-as.psem(gls_stand_list_Bryophytes_sum)
+ps_sum_Bryophytes_sum<-summary(psem_stand_list1_Bryophytes_sum, .progressBar = T)
+ps_sum_Bryophytes_sum
+vario_Bryophytes_sum<-Variogram(gls_stand_Bryophytes_sum,form= ~x +y,resType = "pearson")
+plot(vario_Bryophytes_sum,smooth=T)
+
+#Lichens_sum
+gls_stand_Lichens_sum<-gls(Lichens_sum ~ bio10 + NPP + TreeShrubCover, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_2<-gls(NPP ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+#gls_stand_3<-gls(TreeShrubCover ~ bio10, data= sem_standdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+gls_stand_list_Lichens_sum<-list(gls_stand_Lichens_sum,gls_stand_2,gls_stand_3)
+psem_stand_list1_Lichens_sum<-as.psem(gls_stand_list_Lichens_sum)
+ps_sum_Lichens_sum<-summary(psem_stand_list1_Lichens_sum, .progressBar = T)
+ps_sum_Lichens_sum
+vario_Lichens_sum<-Variogram(gls_stand_Lichens_sum,form= ~x +y,resType = "pearson")
+plot(vario_Lichens_sum,smooth=T)
