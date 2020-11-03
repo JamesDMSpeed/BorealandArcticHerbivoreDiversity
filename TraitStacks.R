@@ -13,8 +13,9 @@ require(mapdata)#Background world map
 require(maptools)#Background world map
 require(rgeos)#Crop biomes map
 require(reshape2)#Data manipulation
-require(FD)
+require(FD)#FD indices
 require(piecewiseSEM)#SEM
+library(segmented)#Segmented regs
 
 
 
@@ -60,46 +61,46 @@ plot(globnpps)#g/m2/yr
 
 # Species data ------------------------------------------------------------
 
-filelist<-list.files('SpeciesDistributionData',full.names = T)
-filelist
-#Stack up
-herbivore_dataset<-stack(filelist)
-
-#Tidy names
-names(herbivore_dataset)<-substring(names(herbivore_dataset),3)
-names(herbivore_dataset)
-
-plot(herbivore_dataset[[1]])
-
-#Project
-herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
-herbivore_dataset
-
-
-#---Different Extent Issue fixed by stacking stacks-not classy but works---
-
-filelist2<-list.files('DifferentExtent',full.names = T)
-filelist2
-#Stack up
-herbivore_dataset2<-stack(filelist2)
-
-#Tidy names
-names(herbivore_dataset2)<-substring(names(herbivore_dataset2),3)
-names(herbivore_dataset2)
-
-plot(herbivore_dataset2[[1]])
-
-#Project
-herbivore_dataset2<-projectRaster(herbivore_dataset2,crs=polarproj)
-herbivore_dataset2
-
-#setExtent(herbivore_dataset2,herbivore_dataset)
-
-#Stack the two
-herbivore_dataset3<-stack(herbivore_dataset,crop(herbivore_dataset2,herbivore_dataset))
-#Working rasterstack = herbivore_dataset3
-writeRaster(herbivore_dataset3,'FinalRanges/',bylayer=T,suffix=names(herbivore_dataset3))
-
+# filelist<-list.files('SpeciesDistributionData',full.names = T)
+# filelist
+# #Stack up
+# herbivore_dataset<-stack(filelist)
+# 
+# #Tidy names
+# names(herbivore_dataset)<-substring(names(herbivore_dataset),3)
+# names(herbivore_dataset)
+# 
+# plot(herbivore_dataset[[1]])
+# 
+# #Project
+# herbivore_dataset<-projectRaster(herbivore_dataset,crs=polarproj)
+# herbivore_dataset
+# 
+# 
+# #---Different Extent Issue fixed by stacking stacks-not classy but works---
+# 
+# filelist2<-list.files('DifferentExtent',full.names = T)
+# filelist2
+# #Stack up
+# herbivore_dataset2<-stack(filelist2)
+# 
+# #Tidy names
+# names(herbivore_dataset2)<-substring(names(herbivore_dataset2),3)
+# names(herbivore_dataset2)
+# 
+# plot(herbivore_dataset2[[1]])
+# 
+# #Project
+# herbivore_dataset2<-projectRaster(herbivore_dataset2,crs=polarproj)
+# herbivore_dataset2
+# 
+# #setExtent(herbivore_dataset2,herbivore_dataset)
+# 
+# #Stack the two
+# herbivore_dataset3<-stack(herbivore_dataset,crop(herbivore_dataset2,herbivore_dataset))
+# #Working rasterstack = herbivore_dataset3
+# writeRaster(herbivore_dataset3,'FinalRanges/',bylayer=T,suffix=names(herbivore_dataset3))
+# 
 
 
 lf<-list.files('FinalRanges/',full.names = T,pattern = 'grd')
@@ -239,14 +240,14 @@ rownames(traitselection)<-traits$SpeciesNames
 traitdf<-traitselection[order(row.names(traitselection)),]#Order alphabetically
 speciesdat<-extract(herbivore_dataset3,1:ncell(herbivore_dataset3),df=T)
 #speciesdata<-speciesdat[,2:ncol(speciesdat)]#Removing ID column
-speciesmat<-speciesdat[,order(names(speciesdata))]#Order alphabeticaaly to match traits
+speciesmat<-speciesdat[,order(names(speciesdat)[2:length(names(speciesdat))])]#Order alphabeticaaly to match traits
 speciesCommunities<-speciesmat[rowSums(speciesmat[,2:ncol(speciesmat)],na.rm=T)>0,]#Remove empty rows #Omit ID column
 speciescoms<-speciesCommunities[,colSums(speciesCommunities,na.rm=T)>0]#Remove empty columns
 s2<-speciescoms[,2:ncol(speciescoms)]
 traitdf1<-traitdf[rownames(traitdf)%in%names(s2),]#Remove empty species from trait data too
 
-funcdiv<-dbFD(x=traitdf1[,c(1:2,5,11:15)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
-funcdiv<-dbFD(x=traitdf1[,c(3:4)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
+#funcdiv<-dbFD(x=traitdf1[,c(1:2,5,11:15)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
+#funcdiv<-dbFD(x=traitdf1[,c(3:4)],a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F)
 funcdiv<-dbFD(x=traitdf1,a=speciescoms[,2:ncol(speciescoms)],corr='lingoes',w.abun=F,stand.x=F,CWM.type = 'all')#Abundance of all ordinal traits.
 
 
@@ -277,9 +278,9 @@ plot(meantraitstack$Body.Mass)
 #Temperature & NDVI etc 
 
 #Global BioClim 2.5deg
-bioclimdat<-getData('worldclim',var='bio',res=2.5)
-bioclimlaea<-projectRaster(bioclimdat,AllVars)
-bioclimlaea_m<-mask(crop(bioclimlaea,AllVars[[1]]),AllVars[[1]])
+bioclimdat<-raster::getData('worldclim',var='bio',res=2.5)
+bioclimlaea<-projectRaster(bioclimdat,herbivore_dataset3)
+bioclimlaea_m<-mask(crop(bioclimlaea,herbivore_dataset3[[1]]),herbivore_dataset3[[1]])
 plot(bioclimlaea_m[[1]])
 
 #Productivity
@@ -290,17 +291,21 @@ globnpp<-raster('Biomes/GlobNPP_AnnMean00_15.tif')
 globnpps<-globnpp*0.1#http://files.ntsg.umt.edu/data/NTSG_Products/MOD17/GeoTIFF/MOD17A3/readme.txt 
 globnpps[globnpps==6553.5]<-NA#Set NAs
 plot(globnpps)#g/m2/yr  #Note missing data
-
-globnpp_laea<-projectRaster(globnpps,AllVars)
-globnpp_m<-mask(crop(globnpp_laea,AllVars[[1]]),AllVars[[1]])
+globnpp_laea<-projectRaster(globnpps,herbivore_dataset3)
+globnpp_m<-mask(crop(globnpp_laea,herbivore_dataset3[[1]]),herbivore_dataset3[[1]])
 plot(globnpp_m)
 
 
 #Stack all up
 AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m)
+names(AllVars)
 names(AllVars)[1]<-'DistanceBiomeBoundary'
 names(AllVars)[51]<-'NPP'
+AllVars$bio10<-AllVars$bio10/10
 writeRaster(AllVars,'AnalysisVars/',by.layer=T,suffix=names(AllVars),overwrite=T)
+
+AVlist<-list.files('AnalaysisVars/')
+AllVars<-stack('AnalaysisVars/')
 names(AllVars)
 
 pairs(AllVars[[c(1:6,12)]])
@@ -311,10 +316,15 @@ cellsXY<-xyFromCell(AllVars,1:ncell(AllVars))
 AllVars_ex<-cbind(AllVars_ext,cellsXY)
 AllVars_ex1<-merge(AllVars_ex,m1,by.x='ID',by.y='cell')
 Av1<-AllVars_ex1[!is.na(AllVars_ex1$PC1),]
-write.csv(Av1,'AnalysisVariables.csv')
 Av1$DistanceBiomeBoundary_km<-Av1$DistanceBiomeBoundary/1000
 Av1$TreeShrubCover<-Av1$treeCover+Av1$ShrubCover
+Av1$Biome<-Av1$DistanceBiomeBoundary_km
+Av1$Biome[Av1$DistanceBiomeBoundary_km<0]<-'Boreal'
+Av1$Biome[Av1$DistanceBiomeBoundary_km>0]<-'Tundra'
+names(Av1)<-sub('.x','',names(Av1))
+#write.csv(Av1,'AnalysisVariables.csv')
 
+Av1<-read.csv('AnalysisVariables.csv',header=T)
 plot(Av1$DistanceBiomeBoundary_km,Av1$ShrubCover,cex=0.5,pch=16)
 plot(Av1$DistanceBiomeBoundary_km,Av1$Body.Mass,cex=0.5,pch=16)
 
@@ -357,12 +367,29 @@ summary(sPC2)
 plot(Av1$DistanceBiomeBoundary_km,Av1$PC2,pch=16,cex=0.1)
 plot.segmented(sPC2,add=T,col=2)
 
+#Trait coords
+traitcoords<-read.csv('FunctionalClassification/Trait_coords.csv')
 
 #PC fig
+par(mfrow=c(2,1))
+cols=c('darkgreen','orange3')
+pcdf<-Av1[!is.na(Av1$PC1)&!is.na(Av1$DistanceBiomeBoundary_km),]
 plot(famdcoord[,2:3],type='n')
 text(famdcoord[,2:3],famdcoord[,1],cex=0.4)
-with(Av1[Av1$DistanceBiomeBoundary_km<0,],points(PC1,PC2,cex=0.1,col=2))#Boreal
-with(Av1[Av1$DistanceBiomeBoundary_km>0,],points(PC1,PC2,cex=0.1,col=4))#Tundra
+with(Av1[Av1$DistanceBiomeBoundary_km<0,],points(PC1,PC2,cex=0.1,col=cols[1]))#Boreal
+with(Av1[Av1$DistanceBiomeBoundary_km>0,],points(PC1,PC2,cex=0.1,col=cols[2]))#Tundra
+#bhull<-chull(pcdf[pcdf$DistanceBiomeBoundary_km<0,5],pcdf[pcdf$DistanceBiomeBoundary_km<0,6])#Boreal
+#bhull<-c(bhull,bhull[1])
+#thull<-chull(pcdf[pcdf$DistanceBiomeBoundary_km>0,5],pcdf[pcdf$DistanceBiomeBoundary_km>0,6])#TUndra
+#thull<-c(thull,thull[1])
+#lines(pcdf[pcdf$DistanceBiomeBoundary_km<0,][bhull,5:6],col=cols[1])
+#lines(pcdf[pcdf$DistanceBiomeBoundary_km>0,][thull,5:6],col=cols[2])
+legend('topl',pch=16,col=cols,paste(levels(as.factor(Av1$Biome))))
+#with(pcdf,dataEllipse(x=PC1,y=PC2,groups=as.factor(Biome),levels=0.95))
+#text(traitcoords[,2:3],as.character(traitcoords[,1]))
+
+plot(traitcoords[,2:3],type='n',xlim=c(-4,2))
+text(traitcoords[,2:3],as.character(traitcoords[,1]),cex=0.6)
 
 plot(famdcoord[,3:4],type='n')
 text(famdcoord[,3:4],famdcoord[,1],cex=0.4)
@@ -372,38 +399,69 @@ with(Av1[Av1$DistanceBiomeBoundary_km>0,],points(PC1,PC2,cex=0.1,col=3))
 #Variables with high loading in res.famd axis 2 expected to show correlation with biome boundary distance
 sort(res.famd$var$coord[,2])
 
-with(Av1,plot(DistanceBiomeBoundary_km,log(Body.Mass),cex=0.1,col=2))
-lmBody.Mass<-lm((Body.Mass)~DistanceBiomeBoundary_km,data=Av1)
-summary(lmBody.Mass)
-sBody.Mass<-segmented.lm(lmBody.Mass,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
-summary(sBody.Mass)
-plot(Av1$DistanceBiomeBoundary_km,(Av1$Body.Mass),pch=16,cex=0.1)
-plot.segmented(sBody.Mass,add=T,col=2)
+#Segmented regression plots
+#Biome dist
+ndDistBiome<-data.frame(DistanceBiomeBoundary_km=seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T),max(Av1$DistanceBiomeBoundary_km,na.rm=T),length.out = 100))
 
-with(Av1,plot(DistanceBiomeBoundary_km,(Litter.Clutch.size),cex=0.1,col=2))
+par(mfrow=c(3,3))
+#with(Av1,plot(DistanceBiomeBoundary_km,log(Body.Mass),cex=0.1,col=2))
+lmBody.Mass<-lm(log(Body.Mass)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmBody.Mass)
+sBody.Mass<-segmented.lm(lmBody.Mass,seg.Z=~DistanceBiomeBoundary_km)
+summary(sBody.Mass)
+plot(Av1$DistanceBiomeBoundary_km,log(Av1$Body.Mass),pch=16,cex=0.1)
+plot.segmented(sBody.Mass,add=T,col=2)
+pseg_sBody.Mass<-data.frame(predict(sBody.Mass,ndDistBiome,interval='confidence',level=0.95))
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sBody.Mass$upr,col=2)
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sBody.Mass$lwr,col=2)
+abline(v=0)
+
+#with(Av1,plot(DistanceBiomeBoundary_km,(Litter.Clutch.size),cex=0.1,col=2))
 lmLitter.Clutch.size<-lm((Litter.Clutch.size)~DistanceBiomeBoundary_km,data=Av1)
 summary(lmLitter.Clutch.size)
 sLitter.Clutch.size<-segmented.lm(lmLitter.Clutch.size,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
 summary(sLitter.Clutch.size)
 plot(Av1$DistanceBiomeBoundary_km,(Av1$Litter.Clutch.size),pch=16,cex=0.1)
 plot.segmented(sLitter.Clutch.size,add=T,col=2)
+pseg_sLitter.Clutch.size<-data.frame(predict(sLitter.Clutch.size,ndDistBiome,interval='confidence',level=0.95))
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sLitter.Clutch.size$upr,col=2)
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sLitter.Clutch.size$lwr,col=2)
 
-with(Av1,plot(DistanceBiomeBoundary_km,(Shrubs_mean),cex=0.1,col=2))
+
+#with(Av1,plot(DistanceBiomeBoundary_km,(Shrubs_mean),cex=0.1,col=2))
 lmShrubs_mean<-lm((Shrubs_mean)~DistanceBiomeBoundary_km,data=Av1)
 summary(lmShrubs_mean)
 sShrubs_mean<-segmented.lm(lmShrubs_mean,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
 summary(sShrubs_mean)
 plot(Av1$DistanceBiomeBoundary_km,(Av1$Shrubs_mean),pch=16,cex=0.1)
 plot.segmented(sShrubs_mean,add=T,col=2)
+pseg_sShrubsm<-data.frame(predict(sShrubs_mean,ndDistBiome,interval='confidence',level=0.95))
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubsm$upr,col=2)
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubsm$lwr,col=2)
 
 
-with(Av1,plot(DistanceBiomeBoundary_km,(Shrubs_sum),cex=0.1,col=2))
+#with(Av1,plot(DistanceBiomeBoundary_km,(Shrubs_sum),cex=0.1,col=2))
 lmShrubs_sum<-lm((Shrubs_sum)~DistanceBiomeBoundary_km,data=Av1)
 summary(lmShrubs_sum)
 sShrubs_sum<-segmented.lm(lmShrubs_sum,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
 summary(sShrubs_sum)
 plot(Av1$DistanceBiomeBoundary_km,(Av1$Shrubs_sum),pch=16,cex=0.1)
 plot.segmented(sShrubs_sum,add=T,col=2)
+pseg_sShrubs<-data.frame(predict(sShrubs_sum,ndDistBiome,interval='confidence',level=0.95))
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubs$upr,col=2)
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubs$lwr,col=2)
+
+with(Av1,plot(DistanceBiomeBoundary_km,Population_dynamics_cyclic,cex=0.1,col=2))
+lmPopDyn_cyclic<-lm(Population_dynamics_cyclic~DistanceBiomeBoundary_km,data=Av1)
+summary(lmPopDyn_cyclic)
+sPopDyn_cyclic<-segmented.lm(lmPopDyn_cyclic,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
+summary(sPopDyn_cyclic)
+plot(Av1$DistanceBiomeBoundary_km,(Av1$Population_dynamics_cyclic),pch=16,cex=0.1)
+plot.segmented(sPopDyn_cyclic,add=T,col=2)
+pseg_sShrubs<-data.frame(predict(sPopDyn_cyclic,ndDistBiome,interval='confidence',level=0.95))
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubs$upr,col=2)
+lines(ndDistBiome$DistanceBiomeBoundary_km,pseg_sShrubs$lwr,col=2)
+
 
 
 ##
@@ -500,8 +558,244 @@ with(Av1,plot(bio10,DistanceBiomeBoundary_km))
 
 with(Av1,plot(treeCover,Use_of_vegetation_ground_vegetation,cex=0.1))
 with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_ground_vegetation),col=2))
-with(Av1,plot(treeCover,Use_of_vegetation_canopy,cex=0.1))
-with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_canopy),col=2))
+with(Av1,plot(treeCover,Use_of_vegetation_ground_vegetation,cex=0.1))
+with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_ground_vegetation),col=2))
+
+
+
+# Biome boundary figure ---------------------------------------------------
+#Biome boundary figure
+cols=c('darkgreen','orange3')
+par(mfcol=c(4,2))
+par(mar=c(4,4,1,1))
+par(oma=c(1,1,1,1))
+
+with(Av1,plot(DistanceBiomeBoundary_km,FRic,cex=0.1,col=cols[as.factor(Biome)]))
+legend('topr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Biome))))
+text(1000,0.25,'Arctic tundra')
+text(-1000,0.01,'Boreal forest')
+lmFRic<-lm(FRic~DistanceBiomeBoundary_km,data=Av1)
+summary(lmFRic)
+davies.test(lmFRic,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sFRic<-segmented.lm(lmFRic,seg.Z=~DistanceBiomeBoundary_km)
+summary(sFRic)
+abline(v=sFRic$psi[2],lty=1,col=2)
+abline(v=sFRic$psi[2]+sFRic$psi[3],lty=2,col=2)
+abline(v=sFRic$psi[2]-sFRic$psi[3],lty=2,col=2)
+plot.segmented(sFRic,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,FDiv,cex=0.1,col=cols[as.factor(Biome)]))
+lmFDiv<-lm(FDiv~DistanceBiomeBoundary_km,data=Av1)
+summary(lmFDiv)
+davies.test(lmFDiv,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sFDiv<-segmented.lm(lmFDiv,seg.Z=~DistanceBiomeBoundary_km)
+summary(sFDiv)
+abline(v=sFDiv$psi[2],lty=1,col=2)
+abline(v=sFDiv$psi[2]+sFDiv$psi[3],lty=2,col=2)
+abline(v=sFDiv$psi[2]-sFDiv$psi[3],lty=2,col=2)
+plot.segmented(sFDiv,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,FDis,cex=0.1,col=cols[as.factor(Biome)]))
+lmFDis<-lm(FDis~DistanceBiomeBoundary_km,data=Av1)
+summary(lmFDis)
+davies.test(lmFDis,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sFDis<-segmented.lm(lmFDis,seg.Z=~DistanceBiomeBoundary_km)
+summary(sFDis)
+abline(v=sFDis$psi[2],lty=1,col=2)
+abline(v=sFDis$psi[2]+sFDis$psi[3],lty=2,col=2)
+abline(v=sFDis$psi[2]-sFDis$psi[3],lty=2,col=2)
+plot.segmented(sFDis,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,FEve,cex=0.1,col=cols[as.factor(Biome)]))
+lmFEve<-lm(FEve~DistanceBiomeBoundary_km,data=Av1)
+summary(lmFEve)
+davies.test(lmFEve,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+#sFEve<-segmented.lm(lmFEve,seg.Z=~DistanceBiomeBoundary_km)
+#summary(sFEve)
+#abline(v=sFEve$psi[2],lty=1,col=2)
+#abline(v=sFEve$psi[2]+sFEve$psi[3],lty=2,col=2)
+#abline(v=sFEve$psi[2]-sFEve$psi[3],lty=2,col=2)
+#plot.segmented(sFEve,add=T,col=2,conf.level = 0.99,shade=T)
+xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+ypt <- data.frame(predict(lmFEve, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = "confidence") )
+lines(xdat,ypt$fit)
+lines(ypt$lwr ~ xdat, lwd = 1.5, lty = 2,col=1)
+lines(ypt$upr ~ xdat, lwd = 1.5, lty = 2,col=1)
+
+#with(Av1,plot(DistanceBiomeBoundary_km,PC1,cex=0.1))
+
+# with(Av1,plot(DistanceBiomeBoundary_km,PC2,cex=0.1,col=cols[as.factor(Biome)]))
+# lmPC2<-lm(PC2~DistanceBiomeBoundary_km,data=Av1)
+# summary(lmPC2)
+# davies.test(lmPC2,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+# #sPC2<-segmented.lm(lmPC2,seg.Z=~DistanceBiomeBoundary_km)
+# #summary(sPC2)
+# #abline(v=sPC2$psi[2],lty=1,col=2)
+# #abline(v=sPC2$psi[2]+sPC2$psi[3],lty=2,col=2)
+# #abline(v=sPC2$psi[2]-sPC2$psi[3],lty=2,col=2)
+# #plot.segmented(sPC2,add=T,col=2,conf.level = 0.99,shade=T)
+# xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+# ypt <- data.frame(predict(lmPC2, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = "confidence",level=0.99) )
+# lines(xdat,ypt$fit)
+# lines(ypt$lwr ~ xdat, lwd = 1.5, lty = 2,col=1)
+# lines(ypt$upr ~ xdat, lwd = 1.5, lty = 2,col=1)
+
+with(Av1,plot(DistanceBiomeBoundary_km,log(body_mass),cex=0.1,col=cols[as.factor(Biome)]))
+lmbody_mass<-lm(log(body_mass)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmbody_mass)
+davies.test(lmbody_mass,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+#sbody_mass<-segmented.lm(lmbody_mass,seg.Z=~DistanceBiomeBoundary_km)
+#summary(sbody_mass)
+#abline(v=sbody_mass$psi[2],lty=1,col=2)
+#abline(v=sbody_mass$psi[2]+sbody_mass$psi[3],lty=2,col=2)
+#abline(v=sbody_mass$psi[2]-sbody_mass$psi[3],lty=2,col=2)
+#plot.segmented(sbody_mass,add=T,col=2,conf.level = 0.99,shade=T)
+xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+ypt <- data.frame(predict(lmbody_mass, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = 'confidence') )
+lines(xdat,ypt$fit)
+lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
+lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
+
+with(Av1,plot(DistanceBiomeBoundary_km,Shrubs_mean,cex=0.1,col=cols[as.factor(Biome)]))
+lmShrubs_mean<-lm((Shrubs_mean)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmShrubs_mean)
+davies.test(lmShrubs_mean,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sShrubs_mean<-segmented.lm(lmShrubs_mean,seg.Z=~DistanceBiomeBoundary_km)
+summary(sShrubs_mean)
+abline(v=sShrubs_mean$psi[2],lty=1,col=2)
+abline(v=sShrubs_mean$psi[2]+sShrubs_mean$psi[3],lty=2,col=2)
+abline(v=sShrubs_mean$psi[2]-sShrubs_mean$psi[3],lty=2,col=2)
+plot.segmented(sShrubs_mean,add=T,col=2,conf.level = 0.99,shade=T)
+#xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+#ypt <- data.frame(predict(lmShrubs_mean, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = 'confidence') )
+#lines(xdat,ypt$fit)
+#lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
+#lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
+
+with(Av1,plot(DistanceBiomeBoundary_km,Use_of_vegetation_ground_vegetation,cex=0.1,col=cols[as.factor(Biome)]))
+lmUse_of_vegetation_ground_vegetation<-lm((Use_of_vegetation_ground_vegetation)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmUse_of_vegetation_ground_vegetation)
+davies.test(lmUse_of_vegetation_ground_vegetation,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sUse_of_vegetation_ground_vegetation<-segmented.lm(lmUse_of_vegetation_ground_vegetation,seg.Z=~DistanceBiomeBoundary_km)
+summary(sUse_of_vegetation_ground_vegetation)
+abline(v=sUse_of_vegetation_ground_vegetation$psi[2],lty=1,col=2)
+abline(v=sUse_of_vegetation_ground_vegetation$psi[2]+sUse_of_vegetation_ground_vegetation$psi[3],lty=2,col=2)
+abline(v=sUse_of_vegetation_ground_vegetation$psi[2]-sUse_of_vegetation_ground_vegetation$psi[3],lty=2,col=2)
+plot.segmented(sUse_of_vegetation_ground_vegetation,add=T,col=2,conf.level = 0.99,shade=T)
+#xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+#ypt <- data.frame(predict(lmUse_of_vegetation_ground_vegetation, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = 'confidence') )
+#lines(xdat,ypt$fit)
+#lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
+#lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
+
+with(Av1,plot(DistanceBiomeBoundary_km,Population_dynamics_cyclic,cex=0.1,col=cols[as.factor(Biome)]))
+lmPopulation_dynamics_cyclic<-lm((Population_dynamics_cyclic)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmPopulation_dynamics_cyclic)
+davies.test(lmPopulation_dynamics_cyclic,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sPopulation_dynamics_cyclic<-segmented.lm(lmPopulation_dynamics_cyclic,seg.Z=~DistanceBiomeBoundary_km)
+summary(sPopulation_dynamics_cyclic)
+abline(v=sPopulation_dynamics_cyclic$psi[2],lty=1,col=2)
+abline(v=sPopulation_dynamics_cyclic$psi[2]+sPopulation_dynamics_cyclic$psi[3],lty=2,col=2)
+abline(v=sPopulation_dynamics_cyclic$psi[2]-sPopulation_dynamics_cyclic$psi[3],lty=2,col=2)
+plot.segmented(sPopulation_dynamics_cyclic,add=T,col=2,conf.level = 0.99,shade=T)
+#xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+#ypt <- data.frame(predict(lmPopulation_dynamics_cyclic, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = 'confidence') )
+#lines(xdat,ypt$fit)
+#lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
+#lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
+
+with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_grubbing,cex=0.1,col=cols[as.factor(Biome)]))
+lmBelowground_feeding_Belowground_feeding_grubbing<-lm((Belowground_feeding_Belowground_feeding_grubbing)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmBelowground_feeding_Belowground_feeding_grubbing)
+davies.test(lmBelowground_feeding_Belowground_feeding_grubbing,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sBelowground_feeding_Belowground_feeding_grubbing<-segmented.lm(lmBelowground_feeding_Belowground_feeding_grubbing,seg.Z=~DistanceBiomeBoundary_km)
+summary(sBelowground_feeding_Belowground_feeding_grubbing)
+abline(v=sBelowground_feeding_Belowground_feeding_grubbing$psi[2],lty=1,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_grubbing$psi[2]+sBelowground_feeding_Belowground_feeding_grubbing$psi[3],lty=2,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_grubbing$psi[2]-sBelowground_feeding_Belowground_feeding_grubbing$psi[3],lty=2,col=2)
+plot.segmented(sBelowground_feeding_Belowground_feeding_grubbing,add=T,col=2,conf.level = 0.99,shade=T)
+#xdat <- seq(min(Av1$DistanceBiomeBoundary_km,na.rm=T), max(Av1$DistanceBiomeBoundary_km,na.rm=T), length.out = 100)
+#ypt <- data.frame(predict(lmBelowground_feeding_Belowground_feeding_grubbing, newdata = data.frame(DistanceBiomeBoundary_km=xdat), interval = 'confidence') )
+#lines(xdat,ypt$fit)
+#lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
+#lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
+
+
+#with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_burrowing,cex=0.1,col=cols[as.factor(Biome)]))
+lmBelowground_feeding_Belowground_feeding_burrowing<-lm((Belowground_feeding_Belowground_feeding_burrowing)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmBelowground_feeding_Belowground_feeding_burrowing)
+davies.test(lmBelowground_feeding_Belowground_feeding_burrowing,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sBelowground_feeding_Belowground_feeding_burrowing<-segmented.lm(lmBelowground_feeding_Belowground_feeding_burrowing,seg.Z=~DistanceBiomeBoundary_km)
+summary(sBelowground_feeding_Belowground_feeding_burrowing)
+abline(v=sBelowground_feeding_Belowground_feeding_burrowing$psi[2],lty=1,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_burrowing$psi[2]+sBelowground_feeding_Belowground_feeding_burrowing$psi[3],lty=2,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_burrowing$psi[2]-sBelowground_feeding_Belowground_feeding_burrowing$psi[3],lty=2,col=2)
+plot.segmented(sBelowground_feeding_Belowground_feeding_burrowing,add=T,col=2,conf.level = 0.99,shade=T)
+
+#with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_burrowing,cex=0.1,col=cols[as.factor(Biome)]))
+lmBelowground_feeding_Belowground_feeding_none<-lm((Belowground_feeding_Belowground_feeding_none)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmBelowground_feeding_Belowground_feeding_none)
+davies.test(lmBelowground_feeding_Belowground_feeding_none,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sBelowground_feeding_Belowground_feeding_none<-segmented.lm(lmBelowground_feeding_Belowground_feeding_none,seg.Z=~DistanceBiomeBoundary_km)
+summary(sBelowground_feeding_Belowground_feeding_none)
+abline(v=sBelowground_feeding_Belowground_feeding_none$psi[2],lty=1,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_none$psi[2]+sBelowground_feeding_Belowground_feeding_none$psi[3],lty=2,col=2)
+abline(v=sBelowground_feeding_Belowground_feeding_none$psi[2]-sBelowground_feeding_Belowground_feeding_none$psi[3],lty=2,col=2)
+plot.segmented(sBelowground_feeding_Belowground_feeding_none,add=T,col=2,conf.level = 0.99,shade=T)
+
+# AbioticBiotic FD Figure -------------------------------------------------
+
+
+par(mfcol=c(4,3))
+par(mar=c(1,1,1,1))
+par(oma=c(5,5,1,1))
+with(Av1,plot(TreeShrubCover,FRic,cex=0.1,las=1,xlab=F,ylab='Functional richness',xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+mtext('Functional richness',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = F)
+legend('bottomr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Biome))))
+with(Av1,plot(TreeShrubCover,FDiv,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = T)
+mtext('Functional divergence',side=2,line=3,cex=0.8)
+with(Av1,plot(TreeShrubCover,FDis,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = T)
+mtext('Functional dissimilarity',side=2,line=3,cex=0.8)
+with(Av1,plot(TreeShrubCover,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(2,las=1,labels = T)
+mtext('Functional evenness',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = T)
+mtext('Woody plant cover (%)',side=1,line=3,cex=0.8)
+with(Av1,plot(NPP,FRic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,FDiv,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,FDis,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = T)
+axis(2,las=1,labels = F)
+mtext(expression('Net primary productivity (g m'^-2*' yr'^-1*')'),side=1,line=3,cex=0.8)
+with(Av1,plot(bio10,FRic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,FDiv,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,FDis,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = T)
+axis(2,las=1,labels = F)
+mtext(expression('Mean summer temperature ('~degree*'C)'),side=1,line=3,cex=0.8)
+
+
+
+# SEMs --------------------------------------------------------------------
 
 
 #Piecewise SEMs

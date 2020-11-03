@@ -255,3 +255,7 @@ plot(borarcherb_functree,no.margin=T)
 #write.tree(borarcherb_functree,file="functional_tree",)
 
 write.csv(res.famd$ind$coord,'FunctionalClassification/FAMD_coords.csv')
+
+#Trait coords
+traitcoordsB<-rbind(res.famd$quali.var$coord,res.famd$quanti.var$coord)
+write.csv(traitcoordsB,'FunctionalClassification/Trait_coords.csv')
