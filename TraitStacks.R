@@ -295,9 +295,11 @@ globnpp_laea<-projectRaster(globnpps,herbivore_dataset3)
 globnpp_m<-mask(crop(globnpp_laea,herbivore_dataset3[[1]]),herbivore_dataset3[[1]])
 plot(globnpp_m)
 
+Ecoregionras<-rasterize(northernecosystemspp,herbivore_dataset3,field='ECO_NAME')
+ecoregs<-extract(Ecoregionras,1:ncell(Ecoregionras))
 
 #Stack all up
-AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m)
+AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m,Ecoregionras)
 names(AllVars)
 names(AllVars)[1]<-'DistanceBiomeBoundary'
 names(AllVars)[51]<-'NPP'
@@ -324,7 +326,10 @@ Av1$Biome[Av1$DistanceBiomeBoundary_km>0]<-'Tundra'
 names(Av1)<-sub('.x','',names(Av1))
 #write.csv(Av1,'AnalysisVariables.csv')
 
+
 Av1<-read.csv('AnalysisVariables.csv',header=T)
+Av1$Ecoregion<-ecoregs[!is.na(AllVars_ex1$PC1)]
+
 plot(Av1$DistanceBiomeBoundary_km,Av1$ShrubCover,cex=0.5,pch=16)
 plot(Av1$DistanceBiomeBoundary_km,Av1$Body.Mass,cex=0.5,pch=16)
 
@@ -771,13 +776,15 @@ dev.off()
 
 # AbioticBiotic FD Figure -------------------------------------------------
 
-
-par(mfcol=c(4,3))
-par(mar=c(1,1,1,1))
+tiff('Figures/AbioticBioticFD.tif',width=8, height=10,units='in',res=250)
+{
+par(mfcol=c(5,3))
+par(mar=c(1,1,0,1))
 par(oma=c(5,5,1,1))
 with(Av1,plot(TreeShrubCover,FRic,cex=0.1,las=1,xlab=F,ylab='Functional richness',xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
 mtext('Functional richness',side=2,line=3,cex=0.8)
 axis(1,tick=T,labels = F)
+axis(2,las=1,labels=T)
 legend('bottomr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Biome))))
 with(Av1,plot(TreeShrubCover,FDiv,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
 axis(1,tick=T,labels = F)
@@ -790,6 +797,10 @@ mtext('Functional dissimilarity',side=2,line=3,cex=0.8)
 with(Av1,plot(TreeShrubCover,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
 axis(2,las=1,labels = T)
 mtext('Functional evenness',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = F)
+with(Av1,plot(TreeShrubCover,PC2,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(2,las=1,labels = T)
+mtext('PC2',side=2,line=3,cex=0.8)
 axis(1,tick=T,labels = T)
 mtext('Woody plant cover (%)',side=1,line=3,cex=0.8)
 with(Av1,plot(NPP,FRic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
@@ -802,6 +813,9 @@ with(Av1,plot(NPP,FDis,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as
 axis(1,tick=T,labels = F)
 axis(2,las=1,labels = F)
 with(Av1,plot(NPP,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,PC2,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
 axis(1,tick=T,labels = T)
 axis(2,las=1,labels = F)
 mtext(expression('Net primary productivity (g m'^-2*' yr'^-1*')'),side=1,line=3,cex=0.8)
@@ -815,11 +829,77 @@ with(Av1,plot(bio10,FDis,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[
 axis(1,tick=T,labels = F)
 axis(2,las=1,labels = F)
 with(Av1,plot(bio10,FEve,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,PC2,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
 axis(1,tick=T,labels = T)
 axis(2,las=1,labels = F)
 mtext(expression('Mean summer temperature ('~degree*'C)'),side=1,line=3,cex=0.8)
+}
+dev.off()
+# AbioticBiotic Trait Figure -------------------------------------------------
 
-
+tiff('Figures/AbiotiBioticTraits.tif',width=6, height=10,units='in',res=250)
+{
+par(mfcol=c(5,3))
+par(mar=c(1,1,1,1))
+par(oma=c(5,5,1,1))
+with(Av1,plot(TreeShrubCover,log(body_mass),cex=0.1,las=1,xlab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+mtext('Body mass \n(log kg)',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels=T)
+legend('bottomr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Biome))))
+with(Av1,plot(TreeShrubCover,Shrubs_mean,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = T)
+mtext('Woody plant diet \n(index)',side=2,line=3,cex=0.8)
+with(Av1,plot(TreeShrubCover,Use_of_vegetation_ground_vegetation,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = T)
+mtext('Ground foraging \n (index)',side=2,line=3,cex=0.8)
+with(Av1,plot(TreeShrubCover,Population_dynamics_cyclic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(2,las=1,labels = T)
+mtext('Cyclic population \ndynamics (index)',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = F)
+with(Av1,plot(TreeShrubCover,Belowground_feeding_Belowground_feeding_none,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(2,las=1,labels = T)
+mtext('Aboveground feeding \n(index)',side=2,line=3,cex=0.8)
+axis(1,tick=T,labels = T)
+mtext('Woody plant cover (%)',side=1,line=3,cex=0.8)
+with(Av1,plot(NPP,log(body_mass),cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,Shrubs_mean,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,Use_of_vegetation_ground_vegetation,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,Population_dynamics_cyclic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(NPP,Belowground_feeding_Belowground_feeding_none,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = T)
+axis(2,las=1,labels = F)
+mtext(expression('Net primary productivity (g m'^-2*' yr'^-1*')'),side=1,line=3,cex=0.8)
+with(Av1,plot(bio10,log(body_mass),cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,Shrubs_mean,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,Use_of_vegetation_ground_vegetation,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,Population_dynamics_cyclic,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = F)
+axis(2,las=1,labels = F)
+with(Av1,plot(bio10,Belowground_feeding_Belowground_feeding_none,cex=0.1,las=1,xlab=F,ylab=F,xaxt='n',yaxt='n',col=cols[as.factor(Biome)]))
+axis(1,tick=T,labels = T)
+axis(2,las=1,labels = F)
+mtext(expression('Mean summer temperature ('~degree*'C)'),side=1,line=3,cex=0.8)
+}
+dev.off()
 
 # SEMs --------------------------------------------------------------------
 
@@ -834,16 +914,16 @@ semdf<-Av1[!is.na(Av1$FRic)&!is.na(Av1$NPP)&!is.na(Av1$bio1)&!is.na(Av1$ShrubCov
 dim(semdf)
 dim(Av1)
 
-sem_standdf<-semdf[,c(3:52,55:56)]
+sem_standdf<-semdf[,c(3:53,103:104)]
 sem_standdf<-data.frame(scale(sem_standdf,scale = T,center=T))
-sem_standdf<-cbind(sem_standdf,semdf[,53:54])#Add XY coords
-
+sem_standdf<-cbind(sem_standdf,cbind(data.frame(x=semdf$x,y=semdf$y)))#Add XY coords
+sem_standdf$Ecoregion<-semdf$Ecoregion
 
 model <- psem(lm(FRic ~ bio10 + NPP + TreeShrubCover, semdf), lm(TreeShrubCover ~ bio10, semdf), lm(NPP ~ bio10, semdf))
 summary(model)
 coefs(model, standardize = "scale")
 coefs(model, standardize = "range")
-a$Estimate
+
 library(gstat)
 va<-variogram(FRic ~ bio10 + NPP + TreeShrubCover,data= semdf,locations= ~x+y)
 plot(va)
@@ -854,12 +934,36 @@ summary(model_stand)
 vas<-variogram(FRic ~ bio10 + NPP + TreeShrubCover,data= sem_standdf,locations= ~x+y)
 plot(vas,smooth=T)
 
+#Checking for spatial autocor with MoranI
+library(ape)
+distMat<-as.matrix(dist(cbind(sem_standdf$x, sem_standdf$y)))
+distsInv<-1/distMat
+diag(distsInv) <-0
+lmT<-lm(FRic ~ bio10 + NPP + TreeShrubCover, sem_standdf)
+mi<-Moran.I(lmT$residuals, distsInv)
+mi
 
+dat<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
+  FRic_r=residuals(lm(FRic ~ bio10 + NPP + TreeShrubCover, sem_standdf)),
+  FDiv_r=residuals(lm(FDiv ~ bio10 + NPP + TreeShrubCover, sem_standdf)),
+  FDis_r=residuals(lm(FDis ~ bio10 + NPP + TreeShrubCover, sem_standdf)),
+  FEve_r=residuals(lm(FEve ~ bio10 + NPP + TreeShrubCover, sem_standdf))))
+coordinates(dat)<-c(dat$x,dat$y)
+bubble(dat,zcol='FRic_r')
+bubble(dat,zcol='FDiv_r')
+bubble(dat,zcol='FDis_r')
+bubble(dat,zcol='FEve_r')
+
+
+#CHeck VIF
+library(car)
+vif(lmT)
 #GLS
 #Fit GLS for all component models
-gls_1<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= semdf,correlation=corLin(form=~x+y, nugget=T), method="ML")
+gls_1<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data= semdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
 gls_2<-gls(NPP ~ bio10, data= semdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
 gls_3<-gls(TreeShrubCover ~ bio10, data= semdf,correlation=corExp(form=~x+y, nugget=T), method="ML")
+vif(gls_1)
 gls_list<-list(gls_1,gls_2,gls_3)
 psemlist1<-as.psem(gls_list)
 summary(psemlist1, .progressBar = T)
@@ -868,6 +972,32 @@ summary(psemlist1, .progressBar = T)
 semdf$resids<-residuals(gls1)
 vario <- Variogram(gls_1, form = ~x + y, resType = "pearson")
 plot(vario,smooth=T)
+
+
+#Mixed mod with ecoregion as a random effect
+?lme
+psemlme_FRic <- psem(lme(FRic ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDiv <- psem(lme(FDiv ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDis <- psem(lme(FDis ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FEve <- psem(lme(FEve ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+
+summary(psemlme_FRic)
+summary(psemlme_FDis)
+summary(psemlme_FDiv)
+summary(psemlme_FEve)
+
+
+residslme<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
+  FRic_r<-residuals(psemlme_FRic),
+  FDis_r<-residuals(psemlme_FDis),
+  FDiv_r<-residuals(psemlme_FDiv),
+  FEve_r<-residuals(psemlme_FEve)))
+bubble(residslme,zcol='FRic_residuals')
+bubble(residslme,zcol='FDis_residuals')
+bubble(residslme,zcol='FDiv_residuals')
+bubble(residslme,zcol='FEve_residuals')
+
+#Spatial reg
 
 #Standardised
 
