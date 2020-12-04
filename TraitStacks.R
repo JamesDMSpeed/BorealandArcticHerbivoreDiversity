@@ -16,6 +16,7 @@ require(reshape2)#Data manipulation
 require(FD)#FD indices
 require(piecewiseSEM)#SEM
 library(segmented)#Segmented regs
+library(gridExtra)#Layout plots
 
 
 
@@ -35,7 +36,17 @@ noreco_shp<-bind(noreco_shp1,alaska)
 #Project
 noreco_shppp<-spTransform(noreco_shp,CRS=crs(polarproj))
 
-#plot(noreco_shppp)
+northerneco_studyregion<-rasterize(noreco_shppp,field='BIOME',res=100)
+
+ext<-as.vector(extent(noreco_shp))
+boundaries <- map('worldHires', fill=TRUE,
+                  xlim=ext[1:2], ylim=ext[3:4],
+                  plot=FALSE)
+IDs <- sapply(strsplit(boundaries$names, ":"), function(x) x[1])
+bPols <- map2SpatialPolygons(boundaries, IDs=IDs,
+                             proj4string=CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+bPolslaea<-spTransform(bPols,crs(polarproj))
+
 
 
 #Biomes
@@ -58,6 +69,8 @@ globnpp<-raster('GlobNPP_AnnMean00_15.tif')
 #Rescale
 globnpps<-globnpp*0.1#http://files.ntsg.umt.edu/data/NTSG_Products/MOD17/GeoTIFF/MOD17A3/readme.txt 
 plot(globnpps)#g/m2/yr
+
+boreal<-gUnionCascaded(northernecosystemspp[northernecosystemspp$BIOME==6,])
 
 # Species data ------------------------------------------------------------
 
@@ -223,10 +236,18 @@ diverge0 <- function(p, ramp) {
   p$par.settings$regions$col <- ramp(1000)[zlim[-length(zlim)]]
   p
 }
-pBB<-levelplot(distBiomeBound,margin=F)
+
+#Polyline as boundary
+bound<-rasterToContour(distBiomeBound,levels=0)
+
+pBB<-levelplot(distBiomeBound,margin=F)+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.polygons(bound,lty=2))
+
 diverge0(pBB,'RdBu')
 
 #Vegetation Cover #See here https://github.com/JamesDMSpeed/AB_FunctionalTraits/blob/master/HerbivoreTraitData.R
+# https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V2.0_I2.20.pdf 
 shrubcov<-raster('VegCover/ShrubCover.tif')
 treecov<-raster('VegCover/treeCover.tif')
 vegcov<-stack(shrubcov,treecov)
@@ -266,6 +287,23 @@ fdivstack<-stack(fdivras,fricras,feveras,fdisras,raoQras)
 names(fdivstack)<-c('FDiv','FRic','FEve','FDis','RaoQ')
 plot(fdivstack)
 
+#Plot fdivstack
+frich<-levelplot(fdivstack[[2]],margin=F,scales=list(draw=F),main='FRic')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+fdiv<-levelplot(fdivstack[[1]],margin=F,scales=list(draw=F),main='FDiv')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+fdis<-levelplot(fdivstack[[4]],margin=F,scales=list(draw=F),main='FDis')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+feve<-levelplot(fdivstack[[3]],margin=F,scales=list(draw=F),main='FEve')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+tiff('Figures/FDmaps.tif',width=10,height=10,units='in',res=200)
+grid.arrange(frich,fdiv,fdis,feve)
+dev.off()
+
 dfCWM<-data.frame(ID=speciescoms$ID,Body.Mass_cwm=funcdiv$CWM$body_mass)#Dataframe with CWM indices and cell numbers
 m2<-merge(df2,dfCWM,by.x='cell',by.y='ID',all.x=T)#Merge together
 Body.Mass_cwm<-setValues(dummyras,m2$Body.Mass_cwm)
@@ -274,13 +312,78 @@ plot(Body.Mass_cwm)
 plot(meantraitstack$Body.Mass)
 
 
+#Species richness
+sprich<-calc(herbivore_dataset3,sum,na.rm=T)
+sprich[sprich==0]<-NA
+levelplot(sprich,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+
+
+# #Phylogeny --------------------------------------------------------------
+
+#Read in phylogeny
+phylogeny<-read.tree('Phylogeny/BestTree.newick')
+plot(phylogeny)
+phylogeny$tip.label
+
+#Change format of tip.labels to match species data
+phylogeny$tip.label<-gsub('_','.',phylogeny$tip.label)
+
+#Match synonym names #Complete
+phylogeny$tip.label[phylogeny$tip.label=="Anas.querquedula"] <- "Spatula.querquedula"
+phylogeny$tip.label[phylogeny$tip.label=="Anser.cygnoides"]<-  "Anser.cygnoid"
+#phylogeny$tip.label[phylogeny$tip.label=="Chen.rossii"]<- "Anser.rossii" 
+#phylogeny$tip.label[phylogeny$tip.label=="Spermophilus.parryii"]<-"Urocitellus.parryii"
+
+
+#Convert raster stack to community dataframe
+communitydata<- getValues(herbivore_dataset3)
+#Replace NA with 0
+communitydata[is.na(communitydata)]<-0
+
+#Use picante to trim community and phylogenetic data
+phydata<-match.phylo.comm(phylogeny,communitydata)
+
+###
+##Check through the dropped species carefully and fix any that are errors.###
+###Checked, No errors, extra species in phylogeny should be dropped.
+#
+##Locate spatial data for those that are missing
+###
+
+#Calculate phylogenetic diversity
+phydiv<-pd(phydata$comm,phydata$phy,include.root=T)
+
+#Rasterize this
+phydivraster<-raster(sprich)
+#Phylogenetic diversity as proportion of total
+phydivraster<-setValues(phydivraster,phydiv$PD/sum(phylogeny$edge.length))
+phydivraster<-mask(phydivraster,sprich,maskvalue=NA)
+
+levelplot(phydivraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+
+#Mean phylogenetic distance
+mphydist<-mntd(phydata$comm,cophenetic(phydata$phy))
+mphydistraster<-raster(sprich)
+mphydistraster<-setValues(mphydistraster,mphydist)
+mphydistraster<-mask(mphydistraster,sprich,maskvalue=NA)
+levelplot(mphydistraster,par.settings=YlOrRdTheme,margin=F,scales=list(draw=F))+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+
+#Phylogenetic species variability, phyloogenetic species clustering ==MNND etc
+?psv
+psvar<-psv(phydata$comm,phydata$phy,compute.var=F)
 
 #Temperature & NDVI etc 
 
 #Global BioClim 2.5deg
 bioclimdat<-raster::getData('worldclim',var='bio',res=2.5)
 bioclimlaea<-projectRaster(bioclimdat,herbivore_dataset3)
-bioclimlaea_m<-mask(crop(bioclimlaea,herbivore_dataset3[[1]]),herbivore_dataset3[[1]])
+bioclimlaea_m<-mask(crop(bioclimlaea,sprich),sprich)
 plot(bioclimlaea_m[[1]])
 
 #Productivity
@@ -292,17 +395,20 @@ globnpps<-globnpp*0.1#http://files.ntsg.umt.edu/data/NTSG_Products/MOD17/GeoTIFF
 globnpps[globnpps==6553.5]<-NA#Set NAs
 plot(globnpps)#g/m2/yr  #Note missing data
 globnpp_laea<-projectRaster(globnpps,herbivore_dataset3)
-globnpp_m<-mask(crop(globnpp_laea,herbivore_dataset3[[1]]),herbivore_dataset3[[1]])
+globnpp_m<-mask(crop(globnpp_laea,sprich),sprich)
 plot(globnpp_m)
 
 Ecoregionras<-rasterize(northernecosystemspp,herbivore_dataset3,field='ECO_NAME')
+Realm<-rasterize(northernecosystemspp,herbivore_dataset3,field='REALM')
 ecoregs<-extract(Ecoregionras,1:ncell(Ecoregionras))
+realm<-extract(Realm,1:ncell(Realm))
 
 #Stack all up
-AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m,Ecoregionras)
+AllVars<-stack(distBiomeBound,vegcov,pcstack,meantraitstack,dietstacksum,sdtraitstack,fdivstack,bioclimlaea_m,globnpp_m,Ecoregionras,Realm,sprich,phydivraster,mphydistraster)
 names(AllVars)
 names(AllVars)[1]<-'DistanceBiomeBoundary'
 names(AllVars)[51]<-'NPP'
+names(AllVars)[52:56]<-c('Ecoregion','Realm','SpeciesRichness','PhylogeneticDiversity','PhylogeneticMeanNearestTaxonDistance')
 AllVars$bio10<-AllVars$bio10/10
 writeRaster(AllVars,'AnalysisVars/',by.layer=T,suffix=names(AllVars),overwrite=T)
 
@@ -371,6 +477,79 @@ sPC2<-segmented.lm(lmPC2,seg.Z=~DistanceBiomeBoundary_km,psi=c(-1000,1000))
 summary(sPC2)
 plot(Av1$DistanceBiomeBoundary_km,Av1$PC2,pch=16,cex=0.1)
 plot.segmented(sPC2,add=T,col=2)
+
+
+# PC species fig ----------------------------------------------------------
+#PC composition
+herbcomp<-extract(herbivore_dataset3,1:ncell(herbivore_dataset3))
+herbcomp[is.na(herbcomp)]<-0
+herbcomp1<-herbcomp[rowSums(herbcomp)>0,]
+
+pc1<-cca(herbcomp1[rowSums(herbcomp1)>2,])
+
+#DbRDA
+dap1<-dbrda(herbcomp1[rowSums(herbcomp1)>2,]~Condition(Av1$Ecoregion[rowSums(herbcomp1)>2]),distance='bray',na.action=na.omit)
+cap1<-capscale(herbcomp1[rowSums(herbcomp1)>2,]~Condition(Av1$Ecoregion[rowSums(herbcomp1)>2]),distance='bray',na.action=na.omit)
+cap0<-capscale(herbcomp1~1,distance='bray',na.action=na.omit)
+plot(cap0,type='n')
+points(cap0,display='wa',pch=16,cex=0.1)
+text(cap0,display='sp',col=2,cex=0.7)
+
+scores(cap0)$species
+plot(Av1$DistanceBiomeBoundary_km,scores(cap0)$sites[,1])
+plot(Av1$DistanceBiomeBoundary_km,scores(cap0)$sites[,2],col=Av1$Realm,pch=16,cex=0.5)
+legend('bottomr',c('Palaearctic','Nearctic'),col=levels(as.factor(Av1$Realm)),pch=16)
+Av1$SpPc2<-scores(cap0)$sites[,2]
+
+lm1<-lm(SpPc2~DistanceBiomeBoundary_km,data=Av1)
+segsp<-davies.test(lm1,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+segsp
+segsplm<-segmented.lm(lm1,seg.Z=~DistanceBiomeBoundary_km)
+summary(segsplm)
+plot.segmented(segsplm,add=T)
+
+#NMDS
+#Select distance index
+cellcoords<-xyFromCell(herbivore_dataset3,1:ncell(herbivore_dataset3))
+rankindex(cellcoords[rowSums(herbcomp1)>2,],herbcomp1[rowSums(herbcomp1)>2,])
+
+#NMDS
+nmds1<-metaMDS(herbcomp1[rowSums(herbcomp1)>2,],autotransform = F,k=3,binary=T,noshare = TRUE,trymax=10,plot=T,trace=T)#One cell with only 2 geese species is a big outlier
+#nmds2<-metaMDS(herbcomp1[rowSums(herbcomp1)>2,],autotransform = F,k=2,binary=T,previous.best=nmds1)
+stressplot(nmds1)
+par(mfrow=c(1,2))
+plot(nmds1,type='n',choices=c(1,2))
+text(nmds1,display='species',cex=0.5,choices=c(1,2))
+plot(nmds1,type='n',choices=c(3,4))
+text(nmds1,display='species',cex=0.5,choices=c(3,4))
+
+dim(herbcomp1)
+dim(herbcomp1[rowSums(herbcomp1)>2,])
+dim(Av1)
+
+#Fill into Av1 including NA for the cells with 2 spp
+which(rowSums(herbcomp1)<=2)
+which(rowSums(herbcomp1)>2)
+
+nmdsscore1<-c()
+nmdsscore2<-c()
+nmdsscore3<-c()
+nmdsscore4<-c()
+nmdsscore1[which(rowSums(herbcomp1)<=2)]<-NA
+nmdsscore2[which(rowSums(herbcomp1)<=2)]<-NA
+nmdsscore3[which(rowSums(herbcomp1)<=2)]<-NA
+nmdsscore4[which(rowSums(herbcomp1)<=2)]<-NA
+nmdsscore1[which(rowSums(herbcomp1)>2)]<-scores(nmds1)[,1]
+nmdsscore2[which(rowSums(herbcomp1)>2)]<-scores(nmds1)[,2]
+nmdsscore3[which(rowSums(herbcomp1)>2)]<-scores(nmds1)[,3]
+nmdsscore4[which(rowSums(herbcomp1)>2)]<-scores(nmds1)[,4]
+
+Av1$Sp_NMDS_1<-nmdsscore1
+Av1$Sp_NMDS_2<-nmdsscore2
+Av1$Sp_NMDS_3<-nmdsscore3
+Av1$Sp_NMDS_4<-nmdsscore4
+
+# PC traits fig ------------------------------------------------------------------
 
 #Trait coords
 traitcoords<-read.csv('FunctionalClassification/Trait_coords.csv')
@@ -576,14 +755,15 @@ with(Av1,lines(loess.smooth(treeCover,Use_of_vegetation_ground_vegetation),col=2
 #Biome boundary figure
 tiff('Figures/BiomeBoundary.tif',width=6, height=10,units='in',res=250)
 {
-cols=c('darkgreen','orange3')
+cols=brewer.pal(n = 8, name = "Dark2")[2:3]
 par(mfcol=c(5,2))
 par(oma=c(5,1,1,1))
 par(mar=c(1,5,0,1))
 
-with(Av1,plot(DistanceBiomeBoundary_km,FRic,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,FRic,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",las=1))
 axis(1,labels=F)
-legend('topr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Biome))))
+#legend('topr',pch=16,col=cols,legend=paste(levels(as.factor(Av1$Realm))))
+legend('topr',pch=16,col=cols,legend=c('Nearctic','Palaearctic'))
 lmFRic<-lm(FRic~DistanceBiomeBoundary_km,data=Av1)
 summary(lmFRic)
 davies.test(lmFRic,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
@@ -594,7 +774,7 @@ abline(v=sFRic$psi[2]+sFRic$psi[3],lty=2,col=2)
 abline(v=sFRic$psi[2]-sFRic$psi[3],lty=2,col=2)
 plot.segmented(sFRic,add=T,col=2,conf.level = 0.99,shade=T)
 
-with(Av1,plot(DistanceBiomeBoundary_km,FDiv,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,FDiv,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",las=1))
 axis(1,labels=F)
 lmFDiv<-lm(FDiv~DistanceBiomeBoundary_km,data=Av1)
 summary(lmFDiv)
@@ -606,7 +786,7 @@ abline(v=sFDiv$psi[2]+sFDiv$psi[3],lty=2,col=2)
 abline(v=sFDiv$psi[2]-sFDiv$psi[3],lty=2,col=2)
 plot.segmented(sFDiv,add=T,col=2,conf.level = 0.99,shade=T)
 
-with(Av1,plot(DistanceBiomeBoundary_km,FDis,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,FDis,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",las=1))
 axis(1,labels=F)
 lmFDis<-lm(FDis~DistanceBiomeBoundary_km,data=Av1)
 summary(lmFDis)
@@ -618,7 +798,7 @@ abline(v=sFDis$psi[2]+sFDis$psi[3],lty=2,col=2)
 abline(v=sFDis$psi[2]-sFDis$psi[3],lty=2,col=2)
 plot.segmented(sFDis,add=T,col=2,conf.level = 0.99,shade=T)
 
-with(Av1,plot(DistanceBiomeBoundary_km,FEve,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,FEve,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",las=1))
 axis(1,labels=F)
 lmFEve<-lm(FEve~DistanceBiomeBoundary_km,data=Av1)
 summary(lmFEve)
@@ -636,7 +816,7 @@ lines(ypt$lwr ~ xdat, lwd = 1.5, lty = 2,col=1)
 lines(ypt$upr ~ xdat, lwd = 1.5, lty = 2,col=1)
 
 #with(Av1,plot(DistanceBiomeBoundary_km,PC1,cex=0.1))
-with(Av1,plot(DistanceBiomeBoundary_km,PC2,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,PC2,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",las=1))
 axis(1,labels=T)
 mtext('Distance to biome boundary (km)',side=1,line=3,cex=0.8)
 mtext('Arctic tundra',side=1,line=-1,adj=0.9,cex=0.8)
@@ -656,7 +836,7 @@ lines(xdat,ypt$fit)
 lines(ypt$lwr ~ xdat, lwd = 1.5, lty = 2,col=1)
 lines(ypt$upr ~ xdat, lwd = 1.5, lty = 2,col=1)
 
-with(Av1,plot(DistanceBiomeBoundary_km,log(body_mass),cex=0.1,col=cols[as.factor(Biome)],xaxt='n',ylab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,log(body_mass),cex=0.1,col=cols[as.factor(Realm)],xaxt='n',ylab="",las=1))
 axis(1,labels=F)
 title(ylab='Body mass \n(log kg)')
 lmbody_mass<-lm(log(body_mass)~DistanceBiomeBoundary_km,data=Av1)
@@ -674,7 +854,7 @@ lines(xdat,ypt$fit)
 lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
 lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
 
-with(Av1,plot(DistanceBiomeBoundary_km,Shrubs_mean,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",ylab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,Shrubs_mean,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
 axis(1,labels=F)
 title(ylab='Woody plant diet \n(index)')
 lmShrubs_mean<-lm((Shrubs_mean)~DistanceBiomeBoundary_km,data=Av1)
@@ -692,7 +872,7 @@ plot.segmented(sShrubs_mean,add=T,col=2,conf.level = 0.99,shade=T)
 #lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
 #lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
 
-with(Av1,plot(DistanceBiomeBoundary_km,Use_of_vegetation_ground_vegetation,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",ylab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,Use_of_vegetation_ground_vegetation,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
 axis(1,labels=F)
 title(ylab='Ground foraging \n(index)')
 lmUse_of_vegetation_ground_vegetation<-lm((Use_of_vegetation_ground_vegetation)~DistanceBiomeBoundary_km,data=Av1)
@@ -710,7 +890,7 @@ plot.segmented(sUse_of_vegetation_ground_vegetation,add=T,col=2,conf.level = 0.9
 #lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
 #lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
 
-with(Av1,plot(DistanceBiomeBoundary_km,Population_dynamics_cyclic,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",ylab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,Population_dynamics_cyclic,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
 axis(1,labels=F)
 title(ylab='Cyclic population \n dynamics (index)')
 lmPopulation_dynamics_cyclic<-lm((Population_dynamics_cyclic)~DistanceBiomeBoundary_km,data=Av1)
@@ -728,7 +908,7 @@ plot.segmented(sPopulation_dynamics_cyclic,add=T,col=2,conf.level = 0.99,shade=T
 #lines(xdat,ypt$lwr, lwd = 1.5, lty = 2,col=1)
 #lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
 
-# with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_grubbing,cex=0.1,col=cols[as.factor(Biome)]))
+# with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_grubbing,cex=0.1,col=cols[as.factor(Realm)]))
 # lmBelowground_feeding_Belowground_feeding_grubbing<-lm((Belowground_feeding_Belowground_feeding_grubbing)~DistanceBiomeBoundary_km,data=Av1)
 # summary(lmBelowground_feeding_Belowground_feeding_grubbing)
 # davies.test(lmBelowground_feeding_Belowground_feeding_grubbing,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
@@ -745,7 +925,7 @@ plot.segmented(sPopulation_dynamics_cyclic,add=T,col=2,conf.level = 0.99,shade=T
 # #lines(xdat,ypt$upr, lwd = 1.5, lty = 2,col=1)
 # 
 # 
-# with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_burrowing,cex=0.1,col=cols[as.factor(Biome)]))
+# with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_burrowing,cex=0.1,col=cols[as.factor(Realm)]))
 # lmBelowground_feeding_Belowground_feeding_burrowing<-lm((Belowground_feeding_Belowground_feeding_burrowing)~DistanceBiomeBoundary_km,data=Av1)
 # summary(lmBelowground_feeding_Belowground_feeding_burrowing)
 # davies.test(lmBelowground_feeding_Belowground_feeding_burrowing,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
@@ -756,7 +936,7 @@ plot.segmented(sPopulation_dynamics_cyclic,add=T,col=2,conf.level = 0.99,shade=T
 # abline(v=sBelowground_feeding_Belowground_feeding_burrowing$psi[2]-sBelowground_feeding_Belowground_feeding_burrowing$psi[3],lty=2,col=2)
 # plot.segmented(sBelowground_feeding_Belowground_feeding_burrowing,add=T,col=2,conf.level = 0.99,shade=T)
 
-with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_none,cex=0.1,col=cols[as.factor(Biome)],xaxt='n',xlab="",ylab="",las=1))
+with(Av1,plot(DistanceBiomeBoundary_km,Belowground_feeding_Belowground_feeding_none,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
 axis(1,labels=T)
 title(ylab='Aboveground feeding \n(index)')
 mtext("Distance to biome boundary (km)",side=1,line=3,cex=0.8)
@@ -773,6 +953,73 @@ abline(v=sBelowground_feeding_Belowground_feeding_none$psi[2]-sBelowground_feedi
 plot.segmented(sBelowground_feeding_Belowground_feeding_none,add=T,col=2,conf.level = 0.99,shade=T)
 }
 dev.off()
+
+
+#Biome boundary Sp rich and PD
+with(Av1,plot(DistanceBiomeBoundary_km,SpeciesRichness,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
+axis(1,labels=T)
+title(ylab='Species richness')
+mtext("Distance to biome boundary (km)",side=1,line=3,cex=0.8)
+mtext('Arctic tundra',side=1,line=-1,adj=0.9,cex=0.8)
+mtext('Boreal forest',side=1,line=-1,adj=0.1,cex=0.8)
+lmSpeciesRichness<-lm((SpeciesRichness)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmSpeciesRichness)
+davies.test(lmSpeciesRichness,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sSpeciesRichness<-segmented.lm(lmSpeciesRichness,seg.Z=~DistanceBiomeBoundary_km)
+summary(sSpeciesRichness)
+abline(v=sSpeciesRichness$psi[2],lty=1,col=2)
+abline(v=sSpeciesRichness$psi[2]+sSpeciesRichness$psi[3],lty=2,col=2)
+abline(v=sSpeciesRichness$psi[2]-sSpeciesRichness$psi[3],lty=2,col=2)
+plot.segmented(sSpeciesRichness,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,PhylogeneticDiversity,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
+axis(1,labels=T)
+title(ylab='PhylogeneticDiversity')
+mtext("Distance to biome boundary (km)",side=1,line=3,cex=0.8)
+mtext('Arctic tundra',side=1,line=-1,adj=0.9,cex=0.8)
+mtext('Boreal forest',side=1,line=-1,adj=0.1,cex=0.8)
+lmPhylogeneticDiversity<-lm((PhylogeneticDiversity)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmPhylogeneticDiversity)
+davies.test(lmPhylogeneticDiversity,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sPhylogeneticDiversity<-segmented.lm(lmPhylogeneticDiversity,seg.Z=~DistanceBiomeBoundary_km)
+summary(sPhylogeneticDiversity)
+abline(v=sPhylogeneticDiversity$psi[2],lty=1,col=2)
+abline(v=sPhylogeneticDiversity$psi[2]+sPhylogeneticDiversity$psi[3],lty=2,col=2)
+abline(v=sPhylogeneticDiversity$psi[2]-sPhylogeneticDiversity$psi[3],lty=2,col=2)
+plot.segmented(sPhylogeneticDiversity,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,SpPc2,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
+axis(1,labels=T)
+title(ylab='SpPc2')
+mtext("Distance to biome boundary (km)",side=1,line=3,cex=0.8)
+mtext('Arctic tundra',side=1,line=-1,adj=0.9,cex=0.8)
+mtext('Boreal forest',side=1,line=-1,adj=0.1,cex=0.8)
+lmSpPc2<-lm((SpPc2)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmSpPc2)
+davies.test(lmSpPc2,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sSpPc2<-segmented.lm(lmSpPc2,seg.Z=~DistanceBiomeBoundary_km)
+summary(sSpPc2)
+abline(v=sSpPc2$psi[2],lty=1,col=2)
+abline(v=sSpPc2$psi[2]+sSpPc2$psi[3],lty=2,col=2)
+abline(v=sSpPc2$psi[2]-sSpPc2$psi[3],lty=2,col=2)
+plot.segmented(sSpPc2,add=T,col=2,conf.level = 0.99,shade=T)
+
+with(Av1,plot(DistanceBiomeBoundary_km,PhylogeneticMeanNearestTonDistance,cex=0.1,col=cols[as.factor(Realm)],xaxt='n',xlab="",ylab="",las=1))
+axis(1,labels=T)
+title(ylab='PhylogeneticMeanNearestTonDistance')
+mtext("Distance to biome boundary (km)",side=1,line=3,cex=0.8)
+mtext('Arctic tundra',side=1,line=-1,adj=0.9,cex=0.8)
+mtext('Boreal forest',side=1,line=-1,adj=0.1,cex=0.8)
+lmPhylogeneticMeanNearestTonDistance<-lm((PhylogeneticMeanNearestTonDistance)~DistanceBiomeBoundary_km,data=Av1)
+summary(lmPhylogeneticMeanNearestTonDistance)
+davies.test(lmPhylogeneticMeanNearestTonDistance,seg.Z=~DistanceBiomeBoundary_km,alternative = 'less')
+sPhylogeneticMeanNearestTonDistance<-segmented.lm(lmPhylogeneticMeanNearestTonDistance,seg.Z=~DistanceBiomeBoundary_km)
+summary(sPhylogeneticMeanNearestTonDistance)
+abline(v=sPhylogeneticMeanNearestTonDistance$psi[2],lty=1,col=2)
+abline(v=sPhylogeneticMeanNearestTonDistance$psi[2]+sPhylogeneticMeanNearestTonDistance$psi[3],lty=2,col=2)
+abline(v=sPhylogeneticMeanNearestTonDistance$psi[2]-sPhylogeneticMeanNearestTonDistance$psi[3],lty=2,col=2)
+plot.segmented(sPhylogeneticMeanNearestTonDistance,add=T,col=2,conf.level = 0.99,shade=T)
+#abline(lmPhylogeneticMeanNearestTonDistance)
 
 # AbioticBiotic FD Figure -------------------------------------------------
 
@@ -910,11 +1157,11 @@ library(piecewiseSEM)
 library(nlme)
 
 #Drop NA rows
-semdf<-Av1[!is.na(Av1$FRic)&!is.na(Av1$NPP)&!is.na(Av1$bio1)&!is.na(Av1$ShrubCover),]
+semdf<-Av1[!is.na(Av1$FRic)&!is.na(Av1$NPP)&!is.na(Av1$bio1)&!is.na(Av1$treeCover)&!is.na(Av1$Ecoregion),]
 dim(semdf)
 dim(Av1)
 
-sem_standdf<-semdf[,c(3:53,103:104)]
+sem_standdf<-semdf[,c(3:58,108:109)]
 sem_standdf<-data.frame(scale(sem_standdf,scale = T,center=T))
 sem_standdf<-cbind(sem_standdf,cbind(data.frame(x=semdf$x,y=semdf$y)))#Add XY coords
 sem_standdf$Ecoregion<-semdf$Ecoregion
@@ -974,30 +1221,9 @@ vario <- Variogram(gls_1, form = ~x + y, resType = "pearson")
 plot(vario,smooth=T)
 
 
-#Mixed mod with ecoregion as a random effect
-?lme
-psemlme_FRic <- psem(lme(FRic ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
-psemlme_FDiv <- psem(lme(FDiv ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
-psemlme_FDis <- psem(lme(FDis ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
-psemlme_FEve <- psem(lme(FEve ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
 
-summary(psemlme_FRic)
-summary(psemlme_FDis)
-summary(psemlme_FDiv)
-summary(psemlme_FEve)
+# GLS SEMs ----------------------------------------------------------------
 
-
-residslme<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
-  FRic_r<-residuals(psemlme_FRic),
-  FDis_r<-residuals(psemlme_FDis),
-  FDiv_r<-residuals(psemlme_FDiv),
-  FEve_r<-residuals(psemlme_FEve)))
-bubble(residslme,zcol='FRic_residuals')
-bubble(residslme,zcol='FDis_residuals')
-bubble(residslme,zcol='FDiv_residuals')
-bubble(residslme,zcol='FEve_residuals')
-
-#Spatial reg
 
 #Standardised
 
@@ -1225,3 +1451,98 @@ ps_sum_Lichens_sum<-summary(psem_stand_list1_Lichens_sum, .progressBar = T)
 ps_sum_Lichens_sum
 vario_Lichens_sum<-Variogram(gls_stand_Lichens_sum,form= ~x +y,resType = "pearson")
 plot(vario_Lichens_sum,smooth=T)
+
+
+
+# #Mixed mod with ecoregion as a random effect ----------------------------
+
+#Treecover
+#mixed mod  
+psemlme_FRic <- psem(lme(FRic ~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDiv <- psem(lme(FDiv ~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDis <- psem(lme(FDis ~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FEve <- psem(lme(FEve ~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_PC2 <- psem(lme(PC2 ~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_SR <- psem(lme(SpeciesRichness~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_PD <- psem(lme(PhylogeneticDiversity~ bio10 + NPP + treeCover,random= ~1|Ecoregion, data=sem_standdf), lme(treeCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+
+#Tree and shrub cover
+#Mixed mod with ecoregion as a random effect
+?lme
+psemlme_FRic <- psem(lme(FRic ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDiv <- psem(lme(FDiv ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FDis <- psem(lme(FDis ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_FEve <- psem(lme(FEve ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_PC2 <- psem(lme(PC2 ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_SR <- psem(lme(SpeciesRichness ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+psemlme_PD <- psem(lme(PhylogeneticDiversity ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf), lme(TreeShrubCover ~ bio10,random=~1|Ecoregion, data= sem_standdf), lme(NPP ~ bio10,random=~1|Ecoregion, data= sem_standdf))
+
+psemlme_FRic_sum<-summary(psemlme_FRic)
+psemlme_FDis_sum<-summary(psemlme_FDis)
+psemlme_FDiv_sum<-summary(psemlme_FDiv)
+psemlme_FEve_sum<-summary(psemlme_FEve)
+psemlme_PC2_sum<-summary(psemlme_PC2)
+psemlme_SR_sum<-summary(psemlme_SR)
+psemlme_PD_sum<-summary(psemlme_PD)
+
+#Collect coefficients
+FDcoefs<-rbind(psemlme_FRic_sum$coefficients[1:3,1:4],
+               psemlme_FDiv_sum$coefficients[1:3,1:4],
+               psemlme_FDis_sum$coefficients[1:3,1:4],
+               psemlme_FEve_sum$coefficients[1:3,1:4],
+               psemlme_SR_sum$coefficients[1:3,1:4],
+               psemlme_PD_sum$coefficients[1:3,1:4])
+FDcoefsmat_est<-matrix(data=FDcoefs[,3],nrow=3,ncol=6,byrow=F,dimnames=list(FDcoefs[1:3,2],c('FRic','FDiv','FDis','FEve','SR','PD')))
+FDcoefsmat_est_all<-cbind(NPP=c(psemlme_FRic_sum$coefficients[5,3],NA,NA),WPC=c(psemlme_FRic_sum$coefficients[4,3],NA,NA),FDcoefsmat_est)
+FDcoefsmat_est_all
+FDcoefsmat_se<-matrix(data=FDcoefs[,4],nrow=3,ncol=6,byrow=F,dimnames=list(FDcoefs[1:3,2],c('FRic','FDiv','FDis','FEve','SR','PD')))
+FDcoefsmat_se_all<-cbind(NPP=c(psemlme_FRic_sum$coefficients[5,4],NA,NA),WPC=c(psemlme_FRic_sum$coefficients[4,4],NA,NA),FDcoefsmat_se)
+FDcoefsmat_se_all
+
+r2s<-rbind(psemlme_FRic_sum$R2[3:1,],psemlme_FDiv_sum$R2[1,],psemlme_FDis_sum$R2[1,],psemlme_FEve_sum$R2[1,],psemlme_SR_sum$R2[1,],psemlme_PD_sum$R2[1,])
+r2s$Response<-as.character(r2s$Response)
+r2s[1,1]<-'Net primary productivity'
+r2s[2,1]<-'Woody plant cover'
+labs<-paste(r2s[,1],' (',r2s[,5],' - ',r2s[,6],')',sep='')
+
+
+tiff('Figures/SEMstandcoefs.tiff',height=6,width=8,units='in',res=150)
+par(mar=c(5,5,1,1))
+#b1<-barplot(t(FDcoefsmat_est_all[,3:8]),beside=T,legend=T,ylim=c(-0.25,0.75),las=1,
+#            ylab='Standardised coefficient',
+#            #col=c('green4','green3',grey(0.2),grey(0.4),grey(0.6),grey(0.8)),
+#            names.arg=c('Mean summer \ntemperature','Net primary \nproductivity','Woody plant \ncover'),
+#            legend.text=labs[3:8],
+#            args.legend=(list(x=20,y=0.55,title=expression('Variable '~('marginal - conditional R'^{2} ) ))))
+#arrows(b1,t(FDcoefsmat_est_all[,3:8])+t(FDcoefsmat_se_all[,3:8]),b1,t(FDcoefsmat_est_all[,3:8])-t(FDcoefsmat_se_all[,3:8]),length=0.05,angle=90,code=3)
+
+
+b2<-barplot(FDcoefsmat_est_all[,3:8],beside=T,legend=T,las=1,ylim=c(-0.25,0.7),
+            ylab='Standardised coefficient')
+arrows(b2,(FDcoefsmat_est_all[,3:8])+(FDcoefsmat_se_all[,3:8]),b2,(FDcoefsmat_est_all[,3:8])-(FDcoefsmat_se_all[,3:8]),length=0.05,angle=90,code=3)
+
+dev.off()
+
+residslme<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
+  FRic_r<-residuals(psemlme_FRic),
+  FDis_r<-residuals(psemlme_FDis),
+  FDiv_r<-residuals(psemlme_FDiv),
+  FEve_r<-residuals(psemlme_FEve)))
+
+b1<-bubble(residslme,zcol='FRic_residuals',main='Residuals: FRic')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+b2<-bubble(residslme,zcol='FDis_residuals',main='Residuals: FDis')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+b3<-bubble(residslme,zcol='FDiv_residuals',main='Residuals: FDiv')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+b4<-bubble(residslme,zcol='FEve_residuals',main='Residuals: FEve')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+tiff('Figures/FDBubbles.tif',width=10,height=10,units='in',res=200)
+grid.arrange(b1,b2,b3,b4,ncol=2)
+dev.off()
+
+#Spatial reg
