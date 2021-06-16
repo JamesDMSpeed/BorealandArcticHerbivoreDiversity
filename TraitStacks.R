@@ -1830,7 +1830,7 @@ residslme<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data
   bodymass_r<-residuals(psemlme_bodymass_T),
   woody_r<-residuals(psemlme_woody_T)))
 
-b1<-bubble(residslme,zcol='SpeciesRichness_residuals',main='Residuals: Species Richness')+
+b1<-bubble(residslme,zcol='SpeciesRichness_residuals',main='Residuals: Species Richness',fill=F)+
   layer(sp.polygons(bPolslaea))+
   layer(sp.lines(bound,lty=2))
 b2<-bubble(residslme,zcol='PhylogeneticDiversity_residuals',main='Residuals: Phylogenetic diversity')+
@@ -1859,6 +1859,101 @@ tiff('Figures/FDBubbles.tif',width=10,height=10,units='in',res=200)
 grid.arrange(b1,b2,b3,b4,b7,b8,ncol=2)
 dev.off()
 
+
+lmeX_SR<-lme(SpeciesRichness ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+lmeX_PD<-lme(PhylogeneticDiversity ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+lmeX_FRic<-lme(FRic ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+lmeX_FDis<-lme(FDis ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+lmeX_BodyMass<-lme(Body.Mass ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+lmeX_WoodyDiet<-lme(Shrubs_mean ~ bio10 + NPP + TreeShrubCover,random= ~1|Ecoregion, data=sem_standdf)
+
+residslmeX<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
+  SR_r<-residuals(lmeX_SR,type='p'),
+  PD_r<-residuals(lmeX_PD),
+  FRic_r<-residuals(lmeX_FRic),
+  FDis_r<-residuals(lmeX_FDis),
+  bodymass_r<-residuals(lmeX_BodyMass),
+  woody_r<-residuals(lmeX_WoodyDiet)))
+
+V1<-plot(Variogram(lmeX_SR,smooth=T),main='Species richness')
+V2<-plot(Variogram(lmeX_PD),main='Phylogenetic diversity')
+V3<-plot(Variogram(lmeX_FRic),main='Functional richness')
+V4<-plot(Variogram(lmeX_FDis),main='Functional dispersion')
+V5<-plot(Variogram(lmeX_BodyMass),main='Body mass')
+V6<-plot(Variogram(lmeX_WoodyDiet),main='Woody plant diet')
+
+tiff('Figures/Variograms.tif',height=8,width=6,units='in',res=100)
+grid.arrange(V1,V2,V3,V4,V5,V6,ncol=2)
+dev.off()
+
+
+
+#SARs
+library(spatialreg)
+
+cell2nb(nrow(sprich),ncol(sprich))
+nn<-knn2nb(knearneigh(cbind(sem_standdf$x,sem_standdf$y), k = 4))
+lagNPP<-SpatialFiltering(NPP~bio10,data=sem_standdf,nb=nn)
+lagShrub<-SpatialFiltering(TreeShrubCover~bio10,data=sem_standdf,nb=nn)
+lagFRic<-SpatialFiltering(FRic ~ bio10 + NPP + TreeShrubCover,data=sem_standdf,nb=nn)
+
+psemSar_frich<-psem(lm(FRic ~ bio10 + NPP + TreeShrubCover+fitted(lagFRic), data=sem_standdf),
+     lm(TreeShrubCover ~ bio10 +fitted(lagShrub), data= sem_standdf),
+     lm(NPP ~ bio10+fitted(lagNPP), data= sem_standdf),
+     NPP%~~%TreeShrubCover)
+
+
+lmP1<-lm(FRic ~ bio10 + NPP + TreeShrubCover, data=sem_standdf)
+lmP2<- lm(TreeShrubCover ~ bio10 , data= sem_standdf)
+lmP3<-lm(NPP ~ bio10, data= sem_standdf)
+
+ps123<-psem(lmP1,lmP2,lmP3)
+
+
+glsT<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data=sem_standdf)
+plot(Variogram(glsT, form=~x+y, robust=T, maxDist=2000, resType="normalized"))
+spaceCor<-corExp(c(1000,0.2),form =~ x+y, nugget=T)
+
+glsNPP<-gls(NPP ~ bio10, data=sem_standdf,correlation = spaceCor)
+glsShrub<-gls(TreeShrubCover ~ bio10, data=sem_standdf,correlation = spaceCor)
+
+glsSR<-gls(SpeciesRichness ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+glsFRic<-gls(FRic ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+glsPD<-gls(PhylogeneticDiversity ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+glsFDis<-gls(FDis ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+glsBodyMass<-gls(Body.Mass ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+glsWoody<-gls(Shrubs_mean ~ bio10 + NPP + TreeShrubCover, data=sem_standdf,correlation = spaceCor)
+
+psemgls_SR<-psem(glsSR,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+psemgls_FRic<-psem(glsFRic,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+psemgls_FDis<-psem(glsFRic,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+psemgls_PD<-psem(glsPD,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+psemgls_BodyMass<-psem(glsBodyMass,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+psemgls_Woody<-psem(glsWoody,glsNPP,glsShrub,NPP%~~%TreeShrubCover)
+
+
+summary(psemgls_SR)
+summary(psemgls_FRic)
+summary(psemgls_FDis)
+summary(psemgls_PD)
+summary(psemgls_BodyMass)
+summary(psemgls_Woody)
+
+
+residsgls<-SpatialPointsDataFrame(coords=cbind(sem_standdf$x,sem_standdf$y),data=data.frame(
+  SR_r<-residuals(psemgls_SR))
+#  PD_r<-residuals(psemlme_PD_T),
+#  FRic_r<-residuals(psemlme_FRic_T),
+#  FDis_r<-residuals(psemlme_FDis_T),
+#  FDiv_r<-residuals(psemlme_FDiv_T),
+#  FEve_r<-residuals(psemlme_FEve_T),
+#  bodymass_r<-residuals(psemlme_bodymass_T),
+#  woody_r<-residuals(psemlme_woody_T)))
+)
+b1<-bubble(residsgls,zcol='SpeciesRichness_residuals',main='Residuals: Species Richness')+
+  layer(sp.polygons(bPolslaea))+
+  layer(sp.lines(bound,lty=2))
+b1
 #LME simple biome tests
 lmBiome_SR<-lme(SpeciesRichness ~ Biome,random=~1|Ecoregion, data= Av1,na.action=na.omit)
 lmBiome_PD<-lme(PhylogeneticDiversity ~ Biome,random=~1|Ecoregion, data= Av1,na.action=na.omit)
